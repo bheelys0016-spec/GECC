@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ข้อร้องเรียน — Smart Rail GECC</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#0F1B2D; --panel:#152641; --panel-line:#25395A;
+    --cream:#F3EEE1; --amber:#E3A857; --amber-dim:#B8863F;
+    --signal:#C1443C; --good:#5C8A66; --teal-grey:#8FA1B3;
+    --font-th:'Noto Sans Thai', sans-serif; --font-mono:'JetBrains Mono', monospace;
+  }
+  *{ box-sizing:border-box; }
+  html,body{ margin:0; padding:0; }
+  body{ font-family:var(--font-th); background:#EDE7D8; color:var(--ink); min-height:100vh; }
+
+  .topbar{ background:var(--ink); color:var(--cream); padding:16px 40px; display:flex; align-items:center; justify-content:space-between; border-bottom:1px solid var(--panel-line); }
+  .brand{ display:flex; align-items:center; gap:10px; }
+  .brand-dot{ width:8px; height:8px; border-radius:50%; background:var(--amber); box-shadow:0 0 8px 1px rgba(227,168,87,0.6); }
+  .brand-label{ font-family:var(--font-mono); font-size:11.5px; letter-spacing:0.12em; color:var(--teal-grey); }
+  .nav-tabs{ display:flex; gap:26px; }
+  .nav-tab{ font-size:13.5px; color:var(--teal-grey); text-decoration:none; padding-bottom:4px; }
+  .nav-tab.active{ color:var(--cream); border-bottom:2px solid var(--amber); }
+  .user-chip{ display:flex; align-items:center; gap:12px; }
+  .avatar{ width:32px; height:32px; border-radius:50%; background:var(--panel); border:1px solid var(--panel-line); display:flex; align-items:center; justify-content:center; font-family:var(--font-mono); font-size:12px; color:var(--amber); }
+  .logout-link{ font-size:12.5px; color:var(--teal-grey); text-decoration:none; border-left:1px solid var(--panel-line); padding-left:14px; }
+
+  .mode-switch{
+    position:fixed; bottom:18px; right:18px; z-index:50;
+    background:var(--ink); color:var(--cream); border:1px solid var(--panel-line);
+    border-radius:20px; padding:9px 16px; font-size:12px; cursor:pointer;
+    box-shadow:0 10px 24px -8px rgba(0,0,0,0.4);
+  }
+
+  /* ===== PUBLIC KIOSK VIEW ===== */
+  #public-view{ display:block; }
+  .kiosk{ max-width:640px; margin:0 auto; padding:50px 24px 70px; text-align:center; }
+  .kiosk-station{ font-family:var(--font-mono); font-size:12px; color:#8A7F63; letter-spacing:0.08em; margin-bottom:6px; }
+  .kiosk h1{ font-size:24px; margin:0 0 6px; }
+  .kiosk p.sub{ font-size:13.5px; color:#7A7261; margin:0 0 34px; }
+
+  .emoji-row{ display:flex; justify-content:space-between; gap:10px; margin-bottom:40px; }
+  .emoji-btn{
+    flex:1; background:#FBF9F3; border:1px solid #DFD8C4; border-radius:8px;
+    padding:18px 8px; cursor:pointer; font-size:30px; transition:transform .1s ease, border-color .15s ease;
+  }
+  .emoji-btn:hover{ transform:translateY(-3px); border-color:var(--amber-dim); }
+  .emoji-btn.picked{ border-color:var(--amber); background:#FBF1DC; }
+  .emoji-btn .cap{ display:block; font-size:11px; font-family:var(--font-th); color:#8A7F63; margin-top:6px; }
+
+  .kiosk-thanks{ display:none; font-size:14px; color:var(--good); margin-bottom:34px; font-weight:600; }
+  .kiosk-thanks.show{ display:block; }
+
+  .issue-block{ text-align:left; background:#FBF9F3; border:1px solid #DFD8C4; border-radius:8px; padding:24px; }
+  .issue-block h2{ font-size:15px; margin:0 0 14px; text-align:center; }
+  .issue-types{ display:grid; grid-template-columns:repeat(2,1fr); gap:10px; margin-bottom:16px; }
+  .issue-type{ background:#fff; border:1px solid #DFD8C4; border-radius:6px; padding:12px; font-size:13px; text-align:center; cursor:pointer; }
+  .issue-type.picked{ border-color:var(--signal); background:rgba(193,68,60,0.06); color:var(--signal); font-weight:600; }
+  .issue-block textarea{ width:100%; font-family:var(--font-th); font-size:13.5px; padding:11px 13px; border:1px solid #CFC7B2; border-radius:6px; resize:vertical; min-height:70px; margin-bottom:14px; }
+  .issue-submit{ width:100%; background:var(--ink); color:var(--cream); border:none; border-radius:6px; padding:13px; font-family:var(--font-th); font-weight:600; font-size:14px; cursor:pointer; }
+  .issue-submit:hover{ background:#1E3252; }
+  .issue-sent{ display:none; text-align:center; font-size:13px; color:var(--good); margin-top:12px; font-weight:600; }
+  .issue-sent.show{ display:block; }
+
+  /* ===== STAFF TICKET VIEW ===== */
+  #staff-view{ display:none; }
+  .page{ max-width:1180px; margin:0 auto; padding:32px 40px 60px; }
+  .page-head h1{ font-size:24px; margin:0 0 5px; }
+  .page-head p{ margin:0 0 22px; font-size:13px; color:#7A7261; }
+
+  .filters{ display:flex; gap:10px; margin-bottom:16px; }
+  .filter-btn{ font-size:12.5px; padding:7px 14px; border-radius:20px; border:1px solid #CFC7B2; background:#FBF9F3; cursor:pointer; color:#5B5545; }
+  .filter-btn.active{ background:var(--ink); color:var(--cream); border-color:var(--ink); }
+
+  .table-block{ background:#FBF9F3; border:1px solid #DFD8C4; border-radius:3px; overflow:hidden; }
+  table{ width:100%; border-collapse:collapse; }
+  th{ text-align:left; font-size:11px; color:#9A927E; font-weight:500; padding:12px 20px; border-bottom:1px solid #E4DDC9; }
+  td{ padding:13px 20px; font-size:13px; border-bottom:1px solid #EEE9DC; vertical-align:top; }
+  tr:last-child td{ border-bottom:none; }
+  .tick-id{ font-family:var(--font-mono); font-size:11.5px; color:#9A927E; }
+  select.status-select{ font-family:var(--font-th); font-size:12px; padding:5px 8px; border-radius:20px; border:none; font-weight:600; cursor:pointer; }
+  .st-new{ background:rgba(193,68,60,0.12); color:var(--signal); }
+  .st-progress{ background:rgba(227,168,87,0.16); color:var(--amber-dim); }
+  .st-done{ background:rgba(92,138,102,0.14); color:var(--good); }
+
+  @media (max-width: 700px){
+    .nav-tabs{ display:none; }
+    .emoji-row{ flex-wrap:wrap; }
+    .emoji-btn{ flex:1 1 30%; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ===================== PUBLIC KIOSK VIEW ===================== -->
+<div id="public-view">
+  <div class="kiosk">
+    <div class="kiosk-station">STATION KIOSK · ไม่ต้องเข้าสู่ระบบ</div>
+    <h1>สถานีกรุงเทพ (หัวลำโพง)</h1>
+    <p class="sub">วันนี้บริการของเราเป็นอย่างไรบ้าง?</p>
+
+    <div class="emoji-row" id="emoji-row">
+      <div class="emoji-btn" onclick="pickEmoji(this,1)">😠<span class="cap">แย่มาก</span></div>
+      <div class="emoji-btn" onclick="pickEmoji(this,2)">🙁<span class="cap">แย่</span></div>
+      <div class="emoji-btn" onclick="pickEmoji(this,3)">😐<span class="cap">พอใช้</span></div>
+      <div class="emoji-btn" onclick="pickEmoji(this,4)">🙂<span class="cap">ดี</span></div>
+      <div class="emoji-btn" onclick="pickEmoji(this,5)">😄<span class="cap">ดีมาก</span></div>
+    </div>
+    <div class="kiosk-thanks" id="kiosk-thanks">ขอบคุณสำหรับความคิดเห็นครับ/ค่ะ 🙏</div>
+
+    <div class="issue-block">
+      <h2>พบปัญหาที่ต้องแจ้ง?</h2>
+      <div class="issue-types" id="issue-types">
+        <div class="issue-type" onclick="pickIssue(this,'ป้ายชำรุด')">🪧 ป้ายชำรุด</div>
+        <div class="issue-type" onclick="pickIssue(this,'แอร์/พัดลมเสีย')">❄️ แอร์/พัดลมเสีย</div>
+        <div class="issue-type" onclick="pickIssue(this,'ห้องน้ำสกปรก')">🚻 ห้องน้ำสกปรก</div>
+        <div class="issue-type" onclick="pickIssue(this,'อื่นๆ')">✏️ อื่นๆ</div>
+      </div>
+      <textarea id="issue-desc" placeholder="อธิบายรายละเอียดปัญหาเพิ่มเติม (ถ้ามี)..."></textarea>
+      <button class="issue-submit" onclick="submitIssue()">ส่งเรื่องแจ้งปัญหา</button>
+      <div class="issue-sent" id="issue-sent">✓ ส่งเรื่องแล้ว ทีมงานจะดำเนินการต่อไป</div>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== STAFF TICKET DASHBOARD ===================== -->
+<div id="staff-view">
+  <div class="topbar">
+    <div class="brand"><span class="brand-dot"></span><span class="brand-label">SMART RAIL · GECC PLATFORM</span></div>
+    <div class="nav-tabs">
+      <a class="nav-tab" href="gecc-dashboard.html">ภาพรวมประเทศ</a>
+      <a class="nav-tab" href="gecc-station.html">รายสถานี</a>
+      <a class="nav-tab" href="gecc-audit.html">ตรวจประเมิน</a>
+      <a class="nav-tab active" href="gecc-feedback.html">ข้อร้องเรียน</a>
+      <a class="nav-tab" href="gecc-report.html">รายงาน</a>
+      <a class="nav-tab" href="gecc-innovation.html">นวัตกรรม</a>
+    </div>
+    <div class="user-chip">
+      <div class="avatar">จ</div>
+      <a class="logout-link" href="gecc-login.html">ออกจากระบบ</a>
+    </div>
+  </div>
+
+  <div class="page">
+    <div class="page-head">
+      <h1>ระบบรับเรื่องร้องเรียนและติดตามสถานะ</h1>
+      <p>เรื่องที่ประชาชนแจ้งผ่านหน้าจอสถานีจะเข้าคิวที่นี่แบบเรียลไทม์</p>
+    </div>
+
+    <div class="filters" id="filters">
+      <button class="filter-btn active" data-f="all" onclick="setFilter('all',this)">ทั้งหมด</button>
+      <button class="filter-btn" data-f="new" onclick="setFilter('new',this)">เรื่องใหม่</button>
+      <button class="filter-btn" data-f="progress" onclick="setFilter('progress',this)">กำลังดำเนินการ</button>
+      <button class="filter-btn" data-f="done" onclick="setFilter('done',this)">แก้ไขแล้ว</button>
+    </div>
+
+    <div class="table-block">
+      <table>
+        <thead>
+          <tr><th>เลขที่</th><th>สถานี</th><th>ประเภทปัญหา</th><th>รายละเอียด</th><th>แจ้งเมื่อ</th><th>สถานะ</th></tr>
+        </thead>
+        <tbody id="ticket-body"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<div class="mode-switch" onclick="toggleMode()" id="mode-switch">มุมมองเจ้าหน้าที่ →</div>
+
+<script>
+let TICKETS = [
+  { id:'TK-1042', station:'นครราชสีมา', type:'แอร์/พัดลมเสีย', desc:'แอร์บริเวณจุดขายตั๋วไม่เย็น', time:'11 ก.ย. 14:20', status:'progress' },
+  { id:'TK-1041', station:'หาดใหญ่', type:'ห้องน้ำสกปรก', desc:'ห้องน้ำชายไม่มีกระดาษทิชชู่', time:'11 ก.ย. 10:05', status:'new' },
+  { id:'TK-1039', station:'เพชรบุรี', type:'ป้ายชำรุด', desc:'ป้ายบอกทางออกหลุดร่วง', time:'10 ก.ย. 16:40', status:'done' },
+  { id:'TK-1038', station:'อุบลราชธานี', type:'อื่นๆ', desc:'แสงสว่างบริเวณชานชาลาไม่เพียงพอ', time:'10 ก.ย. 09:12', status:'new' },
+];
+let currentFilter = 'all';
+let selectedEmoji = null;
+let selectedIssue = null;
+
+function pickEmoji(el, val){
+  document.querySelectorAll('.emoji-btn').forEach(b => b.classList.remove('picked'));
+  el.classList.add('picked');
+  selectedEmoji = val;
+  document.getElementById('kiosk-thanks').classList.add('show');
+}
+
+function pickIssue(el, label){
+  document.querySelectorAll('.issue-type').forEach(b => b.classList.remove('picked'));
+  el.classList.add('picked');
+  selectedIssue = label;
+}
+
+function submitIssue(){
+  if(!selectedIssue){ selectedIssue = 'อื่นๆ'; }
+  const desc = document.getElementById('issue-desc').value.trim() || '(ไม่ระบุรายละเอียดเพิ่มเติม)';
+  const now = new Date();
+  const timeStr = now.toLocaleDateString('th-TH',{day:'2-digit',month:'2-digit'}) + ' ' + now.toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'});
+  const newId = 'TK-' + (1043 + TICKETS.filter(t=>t.id.startsWith('TK-') ).length);
+  TICKETS.unshift({ id:newId, station:'กรุงเทพ (หัวลำโพง)', type:selectedIssue, desc:desc, time:timeStr, status:'new' });
+  document.getElementById('issue-sent').classList.add('show');
+  document.getElementById('issue-desc').value = '';
+  document.querySelectorAll('.issue-type').forEach(b => b.classList.remove('picked'));
+  selectedIssue = null;
+  renderTickets();
+  setTimeout(() => document.getElementById('issue-sent').classList.remove('show'), 3000);
+}
+
+function statusLabel(s){ return s==='new' ? 'เรื่องใหม่' : s==='progress' ? 'กำลังดำเนินการ' : 'แก้ไขแล้ว'; }
+function statusClass(s){ return s==='new' ? 'st-new' : s==='progress' ? 'st-progress' : 'st-done'; }
+
+function renderTickets(){
+  const body = document.getElementById('ticket-body');
+  const rows = TICKETS.filter(t => currentFilter === 'all' || t.status === currentFilter);
+  body.innerHTML = rows.map(t => `
+    <tr>
+      <td class="tick-id">${t.id}</td>
+      <td>${t.station}</td>
+      <td>${t.type}</td>
+      <td>${t.desc}</td>
+      <td class="tick-id">${t.time}</td>
+      <td>
+        <select class="status-select ${statusClass(t.status)}" onchange="updateStatus('${t.id}', this)">
+          <option value="new" ${t.status==='new'?'selected':''}>เรื่องใหม่</option>
+          <option value="progress" ${t.status==='progress'?'selected':''}>กำลังดำเนินการ</option>
+          <option value="done" ${t.status==='done'?'selected':''}>แก้ไขแล้ว</option>
+        </select>
+      </td>
+    </tr>
+  `).join('') || '<tr><td colspan="6" style="text-align:center;color:#9A927E;padding:24px;">ไม่มีรายการในหมวดนี้</td></tr>';
+}
+
+function updateStatus(id, sel){
+  const t = TICKETS.find(x => x.id === id);
+  t.status = sel.value;
+  sel.className = 'status-select ' + statusClass(sel.value);
+}
+
+function setFilter(f, btn){
+  currentFilter = f;
+  document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  renderTickets();
+}
+
+function toggleMode(){
+  const pub = document.getElementById('public-view');
+  const staff = document.getElementById('staff-view');
+  const sw = document.getElementById('mode-switch');
+  if(pub.style.display !== 'none'){
+    pub.style.display = 'none';
+    staff.style.display = 'block';
+    sw.textContent = '← มุมมองประชาชน';
+  } else {
+    pub.style.display = 'block';
+    staff.style.display = 'none';
+    sw.textContent = 'มุมมองเจ้าหน้าที่ →';
+  }
+}
+
+renderTickets();
+</script>
+
+</body>
+</html>
