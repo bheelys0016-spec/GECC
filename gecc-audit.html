@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<script>(function(){try{var t=localStorage.getItem('gecc-theme');if(t==='dark')document.documentElement.setAttribute('data-theme','dark');}catch(e){}})();</script>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ตรวจประเมิน — Smart Rail GECC</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#0F1B2D; --panel:#152641; --panel-line:#25395A;
+    --cream:#F3EEE1; --amber:#E3A857; --amber-dim:#B8863F;
+    --signal:#C1443C; --good:#5C8A66; --teal-grey:#8FA1B3;
+    --font-th:'Noto Sans Thai', sans-serif; --font-mono:'JetBrains Mono', monospace;
+    --page-bg:#EDE7D8;
+    --surface:#FBF9F3;
+    --surface-alt:#FFFFFF;
+    --border:#DFD8C4;
+    --divider:#E4DDC9;
+    --input-border:#CFC7B2;
+    --text-strong:#0F1B2D;
+    --text-dim:#7A7261;
+    --text-faint:#9A927E;
+  }
+  html[data-theme="dark"]{
+    --page-bg:#0B1420;
+    --surface:#16233A;
+    --surface-alt:#1C2C46;
+    --border:#2A3B54;
+    --divider:#243450;
+    --input-border:#35486B;
+    --text-strong:#F3EEE1;
+    --text-dim:#A9B7C8;
+    --text-faint:#7E8FA3;
+  }
+  *{ box-sizing:border-box; }
+  html,body{ margin:0; padding:0; }
+  body{ font-family:var(--font-th); background:var(--page-bg); color:var(--text-strong); min-height:100vh; }
+
+  .topbar{ background:var(--ink); color:var(--cream); padding:16px 40px; display:flex; align-items:center; justify-content:space-between; border-bottom:1px solid var(--panel-line); }
+  .brand{ display:flex; align-items:center; gap:10px; }
+  .brand-dot{ width:8px; height:8px; border-radius:50%; background:var(--amber); box-shadow:0 0 8px 1px rgba(227,168,87,0.6); }
+  .brand-label{ font-family:var(--font-mono); font-size:11.5px; letter-spacing:0.12em; color:var(--teal-grey); }
+  .nav-tabs{ display:flex; gap:26px; }
+  .nav-tab{ font-size:13.5px; color:var(--teal-grey); text-decoration:none; padding-bottom:4px; }
+  .nav-tab.active{ color:var(--cream); border-bottom:2px solid var(--amber); }
+  .user-chip{ display:flex; align-items:center; gap:12px; }
+  .avatar{ width:32px; height:32px; border-radius:50%; background:var(--panel); border:1px solid var(--panel-line); display:flex; align-items:center; justify-content:center; font-family:var(--font-mono); font-size:12px; color:var(--amber); }
+  .logout-link{ font-size:12.5px; color:var(--teal-grey); text-decoration:none; border-left:1px solid var(--panel-line); padding-left:14px; }
+  .logout-link:hover{ color:var(--signal); }
+
+  .page{ max-width:1180px; margin:0 auto; padding:32px 40px 60px; }
+  .page-head{ display:flex; justify-content:space-between; align-items:flex-end; margin-bottom:22px; }
+  .page-head h1{ font-size:24px; margin:0 0 5px; }
+  .page-head p{ margin:0; font-size:13px; color:var(--text-dim); }
+  .station-select{ font-family:var(--font-mono); font-size:12px; color:var(--text-dim); }
+  .station-select select{ font-family:var(--font-th); font-size:13px; padding:6px 10px; border:1px solid var(--input-border); border-radius:3px; background:var(--surface); }
+
+  .layout{ display:grid; grid-template-columns:1fr 300px; gap:20px; align-items:start; }
+
+  .progress-strip{ grid-column:1/-1; background:var(--surface); border:1px solid var(--border); border-radius:3px; padding:16px 20px; display:flex; align-items:center; gap:20px; margin-bottom:4px; }
+  .progress-strip .label{ font-size:12.5px; color:var(--text-dim); white-space:nowrap; }
+  .progress-strip .bar{ flex:1; height:8px; background:var(--divider); border-radius:4px; overflow:hidden; }
+  .progress-strip .bar-fill{ height:100%; background:linear-gradient(90deg, var(--amber-dim), var(--amber)); border-radius:4px; width:57%; }
+  .progress-strip .pct{ font-family:var(--font-mono); font-size:15px; }
+
+  .category{ background:var(--surface); border:1px solid var(--border); border-radius:3px; margin-bottom:14px; overflow:hidden; }
+  .cat-head{ display:flex; justify-content:space-between; align-items:center; padding:15px 20px; cursor:pointer; }
+  .cat-head h3{ margin:0; font-size:14.5px; }
+  .cat-head .count{ font-family:var(--font-mono); font-size:11.5px; color:var(--text-faint); }
+  .cat-body{ border-top:1px solid var(--divider); }
+  .cat-body.collapsed{ display:none; }
+
+  .item{ display:flex; align-items:flex-start; gap:12px; padding:14px 20px; border-bottom:1px solid var(--divider); }
+  .item:last-child{ border-bottom:none; }
+  .item input[type=checkbox]{ margin-top:3px; width:16px; height:16px; accent-color:var(--good); flex:none; }
+  .item-body{ flex:1; }
+  .item-title{ font-size:13.5px; margin-bottom:4px; }
+  .item.checked .item-title{ color:var(--text-dim); text-decoration:line-through; text-decoration-color:var(--text-faint); }
+  .item-evidence{ display:flex; align-items:center; gap:10px; font-size:11.5px; color:var(--text-faint); }
+  .upload-btn{ font-family:var(--font-th); font-size:11.5px; padding:5px 11px; border:1px dashed var(--input-border); border-radius:3px; background:var(--surface); cursor:pointer; color:var(--text-dim); }
+  .upload-btn:hover{ border-color:var(--amber-dim); color:var(--amber-dim); }
+  .evidence-tag{ font-family:var(--font-mono); font-size:11px; color:var(--good); display:none; align-items:center; gap:5px; }
+  .evidence-tag.show{ display:inline-flex; }
+
+  /* AI mock audit sidebar */
+  .ai-panel{ background:var(--ink); color:var(--cream); border:1px solid var(--panel-line); border-radius:3px; padding:20px 22px; position:sticky; top:20px; }
+  .ai-panel h3{ font-size:14px; margin:0 0 8px; }
+  .ai-panel p{ font-size:12px; color:var(--teal-grey); line-height:1.6; margin:0 0 16px; }
+  .ai-btn{ width:100%; background:var(--amber); color:var(--text-strong); border:none; border-radius:3px; padding:11px; font-family:var(--font-th); font-weight:600; font-size:13.5px; cursor:pointer; }
+  .ai-btn:hover{ background:#EEB86B; }
+  .ai-btn:disabled{ background:var(--panel); color:var(--teal-grey); cursor:default; }
+  .ai-result{ margin-top:18px; padding-top:16px; border-top:1px dashed var(--panel-line); display:none; }
+  .ai-result.show{ display:block; }
+  .ai-score{ font-family:var(--font-mono); font-size:26px; margin-bottom:4px; }
+  .ai-score-label{ font-size:11.5px; color:var(--teal-grey); margin-bottom:14px; }
+  .ai-finding{ font-size:12px; margin-bottom:9px; padding-left:14px; position:relative; line-height:1.5; }
+  .ai-finding::before{ content:'—'; position:absolute; left:0; color:var(--amber); }
+  .spinner{ display:none; align-items:center; gap:8px; font-family:var(--font-mono); font-size:11.5px; color:var(--teal-grey); margin-top:14px; }
+  .spinner.show{ display:flex; }
+  .spinner .dot{ width:5px; height:5px; border-radius:50%; background:var(--amber); animation:pulse 1s infinite; }
+  .spinner .dot:nth-child(2){ animation-delay:.2s; } .spinner .dot:nth-child(3){ animation-delay:.4s; }
+  @keyframes pulse{ 0%,100%{opacity:.2;} 50%{opacity:1;} }
+
+  @media (max-width: 900px){
+    .layout{ grid-template-columns:1fr; }
+    .ai-panel{ position:static; }
+    .nav-tabs{ display:none; }
+    .page{ padding:24px 18px 44px; }
+  }
+
+  /* ===== Quick nav (bottom-left) ===== */
+  .quick-nav{ position:fixed; left:20px; bottom:20px; z-index:300; display:flex; flex-direction:column; align-items:flex-start; gap:12px; font-family:var(--font-th); }
+  .qn-fab{ order:2; width:50px; height:50px; border-radius:50%; background:var(--ink); color:var(--cream); border:1px solid var(--panel-line); font-size:19px; cursor:pointer; box-shadow:0 12px 26px -8px rgba(0,0,0,0.45); }
+  .qn-fab:hover{ background:#1E3252; }
+  .qn-panel{ order:1; display:none; background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:10px; width:220px; box-shadow:0 20px 40px -14px rgba(0,0,0,0.35); }
+  .qn-panel.open{ display:block; }
+  .qn-theme-row{ display:flex; justify-content:space-between; align-items:center; padding:8px 10px; font-size:12.5px; color:var(--text-dim); }
+  .dn-toggle{ position:relative; width:50px; height:26px; border-radius:20px; border:none; padding:0; cursor:pointer; overflow:hidden; flex:none; background:linear-gradient(180deg,#8ecbf2 0%, #5da6dd 100%); box-shadow:inset 0 1px 4px rgba(0,0,0,.18); transition:background .5s ease; }
+  html[data-theme="dark"] .dn-toggle{ background:linear-gradient(180deg,#0c1730 0%, #16244a 100%); }
+  .dn-cloud{ position:absolute; top:6px; right:7px; width:11px; height:5px; background:#fff; border-radius:6px; box-shadow:3px -2px 0 -0.5px #fff, -3px -1px 0 -1px #fff; opacity:1; transition:opacity .3s ease; }
+  html[data-theme="dark"] .dn-cloud{ opacity:0; }
+  .dn-star{ position:absolute; width:2px; height:2px; background:#fff; border-radius:50%; opacity:0; transition:opacity .4s ease .1s; }
+  html[data-theme="dark"] .dn-star{ opacity:1; animation:dn-twinkle 2.2s ease-in-out infinite; }
+  .dn-star-1{ top:5px; left:7px; animation-delay:.1s; }
+  .dn-star-2{ top:15px; left:13px; width:1.5px; height:1.5px; animation-delay:.6s; }
+  .dn-star-3{ top:9px; left:18px; animation-delay:1.1s; }
+  @keyframes dn-twinkle{ 0%,100%{opacity:1;} 50%{opacity:.35;} }
+  .dn-thumb{ position:absolute; top:3px; left:3px; width:20px; height:20px; border-radius:50%; background:radial-gradient(circle at 30% 30%, #fff6c9, #ffd451); box-shadow:0 0 8px 2px rgba(255,196,64,.7); transition:left .4s cubic-bezier(.65,-0.4,.35,1.4), background .4s ease, box-shadow .4s ease; }
+  html[data-theme="dark"] .dn-thumb{ left:27px; background:radial-gradient(circle at 35% 30%, #f5f6fa, #cfd3dd); box-shadow:0 0 6px 1px rgba(255,255,255,.35); }
+  .dn-thumb::before,.dn-thumb::after{ content:''; position:absolute; border-radius:50%; background:rgba(140,145,160,.55); opacity:0; transition:opacity .3s ease .15s; }
+  .dn-thumb::before{ width:5px; height:5px; top:4px; left:3px; }
+  .dn-thumb::after{ width:3px; height:3px; bottom:3px; right:4px; }
+  html[data-theme="dark"] .dn-thumb::before, html[data-theme="dark"] .dn-thumb::after{ opacity:1; }
+  .qn-divider{ height:1px; background:var(--divider); margin:6px 4px; }
+  .qn-link{ display:block; padding:9px 10px; font-size:13px; color:var(--text-strong); text-decoration:none; border-radius:6px; }
+  .qn-link:hover{ background:var(--divider); }
+  .qn-link.active{ background:var(--amber); color:var(--ink); font-weight:600; }
+  .qn-logout{ color:var(--signal); }
+
+
+  /* ===== Visual polish: shadows + smooth theme transitions ===== */
+  body, .topbar, .quick-nav *, .kpi-card, .table-block, .chart-block, .form-block,
+  .profile, .directory, .category, .csat-strip, .public-card, .issue-block,
+  .demo-box, .panel, .role-tab, .item, select, input, .status-pill, .badge,
+  .dir-item, .toc, .preview{
+    transition: background-color .25s ease, color .25s ease, border-color .25s ease;
+  }
+  .kpi-card, .table-block, .chart-block, .form-block, .profile, .directory,
+  .category, .csat-strip, .public-card, .issue-block, .preview{
+    box-shadow:0 1px 2px rgba(0,0,0,0.03), 0 8px 20px -14px rgba(0,0,0,0.12);
+  }
+  .kpi-card:hover, .dir-item:hover{
+    box-shadow:0 4px 14px -6px rgba(0,0,0,0.14);
+  }
+
+  .notif-badge{ display:none; align-items:center; justify-content:center; min-width:15px; height:15px; padding:0 4px; margin-left:5px; border-radius:20px; background:var(--signal); color:#fff; font-family:var(--font-mono); font-size:9.5px; font-weight:600; vertical-align:middle; }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="brand"><span class="brand-dot"></span><span class="brand-label">SMART RAIL · GECC PLATFORM</span></div>
+  <div class="nav-tabs">
+    <a class="nav-tab" href="gecc-dashboard.html">ภาพรวมประเทศ</a>
+    <a class="nav-tab" href="gecc-station.html">รายสถานี</a>
+    <a class="nav-tab active" href="gecc-audit.html">ตรวจประเมิน</a>
+    <a class="nav-tab" href="gecc-feedback.html">ข้อร้องเรียน</a>
+    <a class="nav-tab" href="gecc-report.html">รายงาน</a>
+    <a class="nav-tab" href="gecc-innovation.html">นวัตกรรม</a>
+    <a class="nav-tab" href="gecc-notifications.html">แจ้งเตือน<span class="notif-badge"></span></a>
+  </div>
+  <div class="user-chip">
+    <div class="avatar">จ</div>
+    <a class="logout-link" href="index.html">ออกจากระบบ</a>
+  </div>
+</div>
+
+<div class="page">
+  <div class="page-head">
+    <div>
+      <h1>ระบบประเมินตนเองและจัดการหลักฐาน</h1>
+      <p>เช็กลิสต์อิงตามเกณฑ์ GECC พร้อมอัปโหลดหลักฐานและประทับเวลาอัตโนมัติ</p>
+    </div>
+    <div class="station-select">
+      กำลังประเมิน:
+      <select><option>BKK-004 · สถานีกรุงเทพ (หัวลำโพง)</option></select>
+    </div>
+  </div>
+
+  <div class="layout">
+    <div class="progress-strip">
+      <span class="label">ความคืบหน้าการเก็บหลักฐานทั้งหมด</span>
+      <div class="bar"><div class="bar-fill" id="progress-fill"></div></div>
+      <span class="pct" id="progress-pct">57%</span>
+    </div>
+
+    <div id="categories-col">
+      <!-- categories injected by JS -->
+    </div>
+
+    <div class="ai-panel">
+      <h3>AI Mock-Audit</h3>
+      <p>ให้ AI ช่วยตรวจทานความครบถ้วนของเอกสารเบื้องต้น ก่อนส่งให้คณะกรรมการตรวจจริง</p>
+      <button class="ai-btn" id="ai-btn" onclick="runAudit()">เริ่มตรวจสอบเบื้องต้น</button>
+      <div class="spinner" id="ai-spinner"><span class="dot"></span><span class="dot"></span><span class="dot"></span> กำลังวิเคราะห์เอกสาร...</div>
+      <div class="ai-result" id="ai-result">
+        <div class="ai-score">72<span style="font-size:14px;color:var(--teal-grey);"> / 100</span></div>
+        <div class="ai-score-label">ความครบถ้วนของหลักฐานเบื้องต้น</div>
+        <div class="ai-finding">ยังไม่พบหลักฐานภาพถ่ายทางลาดผู้พิการที่ชัดเจนพอ</div>
+        <div class="ai-finding">เอกสารป้ายบอกทางภาษาอังกฤษยังไม่ครบทุกจุด</div>
+        <div class="ai-finding">หมวดการให้บริการมีหลักฐานครบถ้วนดี</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const CATEGORIES = [
+  { name:'ด้านกายภาพและสิ่งอำนวยความสะดวก', items:[
+    { title:'ป้ายบอกทางภายในสถานี (ไทย/อังกฤษ)', checked:true },
+    { title:'ทางลาดและสิ่งอำนวยความสะดวกสำหรับผู้พิการ', checked:false },
+    { title:'ห้องน้ำสาธารณะสะอาดและมีป้ายชัดเจน', checked:true },
+    { title:'จุดพักคอยและที่นั่งเพียงพอ', checked:false },
+  ]},
+  { name:'ด้านการให้บริการ', items:[
+    { title:'จุดประชาสัมพันธ์และเจ้าหน้าที่ให้ข้อมูล', checked:true },
+    { title:'ระบบคิวหรือจัดลำดับการให้บริการ', checked:true },
+    { title:'ช่องทางรับเรื่องร้องเรียนที่มองเห็นชัดเจน', checked:false },
+  ]},
+  { name:'ด้านนวัตกรรมและเทคโนโลยี', items:[
+    { title:'ตู้แปลภาษาอัตโนมัติที่ช่องขายตั๋ว', checked:true },
+    { title:'จอแสดงผลข้อมูลเดินรถแบบเรียลไทม์', checked:false },
+    { title:'ระบบนำทาง AR ภายในสถานี', checked:false },
+  ]},
+];
+
+function renderCategories(){
+  const col = document.getElementById('categories-col');
+  col.innerHTML = '';
+  CATEGORIES.forEach((cat, ci) => {
+    const doneCount = cat.items.filter(i => i.checked).length;
+    const catEl = document.createElement('div');
+    catEl.className = 'category';
+    catEl.innerHTML = `
+      <div class="cat-head" onclick="toggleCat(${ci})">
+        <h3>${cat.name}</h3>
+        <span class="count">${doneCount}/${cat.items.length} รายการ</span>
+      </div>
+      <div class="cat-body" id="cat-body-${ci}">
+        ${cat.items.map((it, ii) => `
+          <div class="item ${it.checked ? 'checked' : ''}" id="item-${ci}-${ii}">
+            <input type="checkbox" ${it.checked ? 'checked' : ''} onchange="toggleItem(${ci},${ii})">
+            <div class="item-body">
+              <div class="item-title">${it.title}</div>
+              <div class="item-evidence">
+                <button class="upload-btn" onclick="uploadEvidence(${ci},${ii})">แนบหลักฐาน</button>
+                <span class="evidence-tag ${it.checked ? 'show' : ''}" id="tag-${ci}-${ii}">✓ อัปโหลดแล้ว · ${timestamp()}</span>
+              </div>
+            </div>
+          </div>
+        `).join('')}
+      </div>
+    `;
+    col.appendChild(catEl);
+  });
+  updateProgress();
+}
+
+function timestamp(){
+  const d = new Date();
+  return d.toLocaleDateString('th-TH', {day:'2-digit', month:'2-digit', year:'2-digit'}) + ' ' + d.toLocaleTimeString('th-TH', {hour:'2-digit', minute:'2-digit'});
+}
+
+function toggleCat(ci){
+  const body = document.getElementById('cat-body-' + ci);
+  body.classList.toggle('collapsed');
+}
+
+function toggleItem(ci, ii){
+  CATEGORIES[ci].items[ii].checked = !CATEGORIES[ci].items[ii].checked;
+  renderCategories();
+}
+
+function uploadEvidence(ci, ii){
+  CATEGORIES[ci].items[ii].checked = true;
+  renderCategories();
+}
+
+function updateProgress(){
+  const all = CATEGORIES.flatMap(c => c.items);
+  const done = all.filter(i => i.checked).length;
+  const pct = Math.round((done / all.length) * 100);
+  document.getElementById('progress-fill').style.width = pct + '%';
+  document.getElementById('progress-pct').textContent = pct + '%';
+}
+
+function runAudit(){
+  const btn = document.getElementById('ai-btn');
+  const spinner = document.getElementById('ai-spinner');
+  const result = document.getElementById('ai-result');
+  btn.disabled = true;
+  btn.textContent = 'กำลังตรวจสอบ...';
+  spinner.classList.add('show');
+  result.classList.remove('show');
+  setTimeout(() => {
+    spinner.classList.remove('show');
+    result.classList.add('show');
+    btn.disabled = false;
+    btn.textContent = 'ตรวจสอบอีกครั้ง';
+  }, 1800);
+}
+
+renderCategories();
+</script>
+
+
+<div class="quick-nav" id="quick-nav">
+  <div class="qn-panel" id="qn-panel">
+    <div class="qn-theme-row">
+      <span>โหมดกลางคืน</span>
+      <button class="dn-toggle" id="qn-switch" onclick="toggleTheme()" aria-label="สลับโหมดกลางวัน/กลางคืน">
+        <span class="dn-star dn-star-1"></span>
+        <span class="dn-star dn-star-2"></span>
+        <span class="dn-star dn-star-3"></span>
+        <span class="dn-cloud"></span>
+        <span class="dn-thumb"></span>
+      </button>
+    </div>
+    <div class="qn-divider"></div>
+      <a class="qn-link" href="index.html">🔑 เข้าสู่ระบบ</a>
+      <a class="qn-link" href="gecc-dashboard.html">📊 ภาพรวมประเทศ</a>
+      <a class="qn-link" href="gecc-station.html">🚉 รายสถานี</a>
+      <a class="qn-link active" href="gecc-audit.html">📋 ตรวจประเมิน</a>
+      <a class="qn-link" href="gecc-feedback.html">💬 ข้อร้องเรียน</a>
+      <a class="qn-link" href="gecc-report.html">🧾 รายงาน</a>
+      <a class="qn-link" href="gecc-innovation.html">✨ นวัตกรรม</a>
+      <a class="qn-link" href="gecc-notifications.html">🔔 แจ้งเตือน<span class="notif-badge"></span></a>
+      <div class="qn-divider"></div>
+      <a class="qn-link qn-logout" href="index.html">⏻ ออกจากระบบ</a>
+  </div>
+  <button class="qn-fab" id="qn-fab" onclick="toggleQuickNav()" title="เมนู">☰</button>
+</div>
+
+<script>
+function toggleQuickNav(){ document.getElementById('qn-panel').classList.toggle('open'); }
+function toggleTheme(){
+  const html = document.documentElement;
+  const isDark = html.getAttribute('data-theme') === 'dark';
+  html.setAttribute('data-theme', isDark ? 'light' : 'dark');
+  try{ localStorage.setItem('gecc-theme', isDark ? 'light' : 'dark'); }catch(e){}
+}
+document.addEventListener('click', function(e){
+  const nav = document.getElementById('quick-nav');
+  if(nav && !nav.contains(e.target)){ document.getElementById('qn-panel').classList.remove('open'); }
+});
+</script>
+
+<script>
+(function(){
+  var GECC_NOTIF_IDS = ['n1','n2','n3','n4','n5','n6'];
+  var read = [];
+  try{ read = JSON.parse(localStorage.getItem('gecc-notif-read') || '[]'); }catch(e){}
+  var unread = GECC_NOTIF_IDS.filter(function(id){ return read.indexOf(id) === -1; }).length;
+  document.querySelectorAll('.notif-badge').forEach(function(b){
+    if(unread > 0){ b.textContent = unread; b.style.display = 'inline-flex'; }
+    else{ b.style.display = 'none'; }
+  });
+})();
+</script>
+</body>
+</html>
