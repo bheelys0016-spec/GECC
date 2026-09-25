@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ศูนย์บัญชาการ Live — Smart Rail GECC</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#05080F;
+    --panel:#0C1424;
+    --panel-line:#1B2942;
+    --cream:#F3EEE1;
+    --amber:#F2B75B;
+    --amber-glow:rgba(242,183,91,0.55);
+    --cyan:#5FD4D6;
+    --signal:#FF5C5C;
+    --good:#5FE3A0;
+    --teal-grey:#8FA1B3;
+    --font-th:'Noto Sans Thai', sans-serif;
+    --font-mono:'JetBrains Mono', monospace;
+  }
+  *{ box-sizing:border-box; }
+  html,body{ margin:0; padding:0; height:100%; overflow:hidden; }
+  body{
+    font-family:var(--font-th);
+    background:
+      radial-gradient(circle at 20% 15%, rgba(242,183,91,0.07), transparent 40%),
+      radial-gradient(circle at 80% 85%, rgba(95,212,214,0.06), transparent 45%),
+      var(--ink);
+    color:var(--cream);
+    height:100vh;
+    display:flex;
+    flex-direction:column;
+    position:relative;
+  }
+
+  /* floating particles */
+  .particle{ position:absolute; width:3px; height:3px; border-radius:50%; background:var(--amber); opacity:0.35; animation:drift linear infinite; }
+  @keyframes drift{
+    0%{ transform:translateY(0) translateX(0); opacity:0; }
+    10%{ opacity:.5; }
+    90%{ opacity:.5; }
+    100%{ transform:translateY(-100vh) translateX(30px); opacity:0; }
+  }
+
+  .exit-btn{
+    position:absolute; top:18px; left:20px; z-index:50;
+    font-family:var(--font-mono); font-size:11px; letter-spacing:0.05em;
+    color:var(--teal-grey); text-decoration:none;
+    border:1px solid var(--panel-line); border-radius:20px;
+    padding:7px 14px; background:rgba(12,20,36,0.7); backdrop-filter:blur(4px);
+  }
+  .exit-btn:hover{ color:var(--amber); border-color:var(--amber); }
+
+  .header{
+    display:flex; justify-content:space-between; align-items:center;
+    padding:20px 40px 10px; position:relative; z-index:2;
+  }
+  .brand{ display:flex; flex-direction:column; align-items:center; margin:0 auto; text-align:center; }
+  .brand .eyebrow{ font-family:var(--font-mono); font-size:11px; letter-spacing:0.3em; color:var(--teal-grey); }
+  .brand h1{ font-size:22px; margin:4px 0 0; letter-spacing:0.04em; text-shadow:0 0 18px var(--amber-glow); }
+  .clock{ font-family:var(--font-mono); text-align:right; }
+  .clock .time{ font-size:26px; color:var(--amber); text-shadow:0 0 14px var(--amber-glow); }
+  .clock .date{ font-size:11px; color:var(--teal-grey); margin-top:2px; }
+
+  .main-grid{
+    flex:1; display:grid; grid-template-columns:280px 1fr 320px; gap:18px;
+    padding:6px 40px 10px; min-height:0; position:relative; z-index:2;
+  }
+
+  .panel{
+    background:rgba(12,20,36,0.55);
+    border:1px solid var(--panel-line);
+    border-radius:8px;
+    padding:16px 18px;
+    backdrop-filter:blur(6px);
+    display:flex; flex-direction:column;
+  }
+  .panel-title{ font-family:var(--font-mono); font-size:10.5px; letter-spacing:0.12em; color:var(--teal-grey); margin-bottom:12px; }
+
+  /* KPI counters */
+  .kpi-stack{ display:flex; flex-direction:column; gap:16px; }
+  .kpi-item{ text-align:left; }
+  .kpi-item .num{ font-family:var(--font-mono); font-size:34px; font-weight:600; color:var(--cream); text-shadow:0 0 16px rgba(255,255,255,0.12); line-height:1; }
+  .kpi-item.good .num{ color:var(--good); text-shadow:0 0 16px rgba(95,227,160,0.4); }
+  .kpi-item.bad .num{ color:var(--signal); text-shadow:0 0 16px rgba(255,92,92,0.4); }
+  .kpi-item.amber .num{ color:var(--amber); text-shadow:0 0 16px var(--amber-glow); }
+  .kpi-item .lbl{ font-size:11.5px; color:var(--teal-grey); margin-top:6px; }
+  .kpi-bar{ height:4px; background:var(--panel-line); border-radius:3px; margin-top:8px; overflow:hidden; }
+  .kpi-bar-fill{ height:100%; border-radius:3px; background:linear-gradient(90deg, var(--amber), var(--cyan)); width:0%; transition:width 1.4s cubic-bezier(.2,.8,.2,1); }
+
+  /* Map panel */
+  .map-panel{ position:relative; }
+  .map-svg{ flex:1; width:100%; }
+  .map-legend{ display:flex; gap:16px; justify-content:center; margin-top:8px; font-size:10.5px; color:var(--teal-grey); }
+  .map-legend span{ display:flex; align-items:center; gap:5px; }
+  .legend-dot{ width:7px; height:7px; border-radius:50%; }
+
+  .ping{ animation:ping-anim 2.2s ease-out infinite; }
+  @keyframes ping-anim{
+    0%{ r:5; opacity:0.9; }
+    70%{ r:16; opacity:0; }
+    100%{ r:16; opacity:0; }
+  }
+
+  /* Spotlight rotating panel */
+  .spotlight-panel{ flex:1; min-height:0; }
+  .spotlight-slide{ display:none; flex-direction:column; gap:10px; animation:fadeIn .5s ease; }
+  .spotlight-slide.active{ display:flex; }
+  @keyframes fadeIn{ from{ opacity:0; transform:translateY(6px);} to{ opacity:1; transform:translateY(0);} }
+  .spotlight-slide h3{ font-size:14px; margin:0 0 4px; color:var(--cream); }
+  .spotlight-row{ display:flex; justify-content:space-between; align-items:center; font-size:12.5px; padding:7px 0; border-bottom:1px solid var(--panel-line); }
+  .spotlight-row:last-child{ border-bottom:none; }
+  .spotlight-row .tag{ font-family:var(--font-mono); font-size:11px; color:var(--signal); }
+  .spotlight-row .tag.mid{ color:var(--amber); }
+  .spotlight-dots{ display:flex; gap:6px; justify-content:center; margin-top:10px; }
+  .spotlight-dots span{ width:6px; height:6px; border-radius:50%; background:var(--panel-line); }
+  .spotlight-dots span.active{ background:var(--amber); }
+
+  /* Ticker */
+  .ticker-wrap{
+    position:relative; z-index:2;
+    border-top:1px solid var(--panel-line);
+    background:rgba(5,8,15,0.85);
+    padding:12px 0;
+    overflow:hidden;
+    white-space:nowrap;
+  }
+  .ticker-label{
+    position:absolute; left:0; top:0; bottom:0; z-index:3;
+    background:var(--amber); color:var(--ink); font-family:var(--font-mono);
+    font-size:11px; font-weight:700; padding:0 16px; display:flex; align-items:center;
+    letter-spacing:0.08em;
+  }
+  .ticker-track{ display:inline-block; padding-left:100%; animation:ticker-scroll 32s linear infinite; font-size:13px; }
+  .ticker-track span{ margin-right:60px; color:var(--teal-grey); }
+  .ticker-track span b{ color:var(--cream); font-weight:600; }
+  @keyframes ticker-scroll{ 0%{ transform:translateX(0); } 100%{ transform:translateX(-100%); } }
+
+  @media (max-width: 1000px){
+    .main-grid{ grid-template-columns:1fr; grid-auto-rows:auto; overflow-y:auto; }
+    body{ overflow-y:auto; }
+    html,body{ overflow:auto; height:auto; min-height:100vh; }
+  }
+</style>
+</head>
+<body>
+
+<div id="particles"></div>
+
+<a class="exit-btn" href="gecc-dashboard.html">← ออกจากโหมดจอภาพรวม</a>
+
+<div class="header">
+  <div style="width:120px;"></div>
+  <div class="brand">
+    <span class="eyebrow">SMART RAIL · GECC PLATFORM</span>
+    <h1>ศูนย์บัญชาการภาพรวมแบบเรียลไทม์</h1>
+  </div>
+  <div class="clock">
+    <div class="time" id="live-clock">--:--:--</div>
+    <div class="date" id="live-date">-</div>
+  </div>
+</div>
+
+<div class="main-grid">
+
+  <div class="panel">
+    <div class="panel-title">ตัวชี้วัดหลักทั่วประเทศ</div>
+    <div class="kpi-stack">
+      <div class="kpi-item">
+        <div class="num" data-target="142" id="num-total">0</div>
+        <div class="lbl">สถานีทั้งหมดในระบบ</div>
+      </div>
+      <div class="kpi-item good">
+        <div class="num" data-target="68" id="num-pass">0</div>
+        <div class="lbl">ผ่านมาตรฐาน GECC</div>
+        <div class="kpi-bar"><div class="kpi-bar-fill" id="bar-pass"></div></div>
+      </div>
+      <div class="kpi-item amber">
+        <div class="num" data-target="87" id="num-csat">0</div>
+        <div class="lbl">CSAT เฉลี่ยทั่วประเทศ (×20)</div>
+        <div class="kpi-bar"><div class="kpi-bar-fill" id="bar-csat"></div></div>
+      </div>
+      <div class="kpi-item bad">
+        <div class="num" data-target="12" id="num-risk">0</div>
+        <div class="lbl">สถานีความเสี่ยงสูง (คาดการณ์)</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel map-panel">
+    <div class="panel-title">โครงข่ายทางรถไฟสายหลัก · สถานะเรียลไทม์</div>
+    <svg class="map-svg" viewBox="0 0 620 360" xmlns="http://www.w3.org/2000/svg">
+      <circle cx="70" cy="180" r="6" fill="var(--amber)"/>
+      <circle class="ping" cx="70" cy="180" r="5" fill="none" stroke="var(--amber)" stroke-width="1.5"/>
+      <text x="20" y="205" font-family="JetBrains Mono, monospace" font-size="11" fill="var(--cream)">กรุงเทพ</text>
+
+      <path id="line-north" d="M70,180 C 180,180 210,60 420,55" fill="none" stroke="#1B2942" stroke-width="2"/>
+      <path id="line-ne"    d="M70,180 C 190,180 240,120 460,115" fill="none" stroke="#1B2942" stroke-width="2"/>
+      <path id="line-east"  d="M70,180 C 180,180 210,225 380,235" fill="none" stroke="#1B2942" stroke-width="2"/>
+      <path id="line-south" d="M70,180 C 160,180 190,300 380,310" fill="none" stroke="#1B2942" stroke-width="2"/>
+
+      <g>
+        <circle cx="170" cy="151" r="4" fill="var(--good)"/>
+        <circle cx="270" cy="103" r="4" fill="var(--good)"/>
+        <circle cx="350" cy="72" r="4" fill="var(--amber)"/>
+        <circle cx="400" cy="56" r="4" fill="var(--amber)"/>
+      </g>
+      <g>
+        <circle cx="190" cy="167" r="4" fill="var(--amber)"/>
+        <circle cx="300" cy="138" r="5" fill="var(--signal)"/>
+        <circle class="ping" cx="300" cy="138" r="5" fill="none" stroke="var(--signal)" stroke-width="1.5"/>
+        <circle cx="390" cy="120" r="5" fill="var(--signal)"/>
+        <circle class="ping" cx="390" cy="120" r="5" fill="none" stroke="var(--signal)" stroke-width="1.5"/>
+        <circle cx="450" cy="115" r="4" fill="var(--good)"/>
+      </g>
+      <g>
+        <circle cx="190" cy="197" r="4" fill="var(--good)"/>
+        <circle cx="280" cy="216" r="4" fill="var(--good)"/>
+        <circle cx="350" cy="232" r="4" fill="var(--amber)"/>
+      </g>
+      <g>
+        <circle cx="150" cy="223" r="4" fill="var(--signal)"/>
+        <circle cx="230" cy="262" r="4" fill="var(--amber)"/>
+        <circle cx="300" cy="292" r="4" fill="var(--amber)"/>
+        <circle cx="360" cy="308" r="5" fill="var(--signal)"/>
+        <circle class="ping" cx="360" cy="308" r="5" fill="none" stroke="var(--signal)" stroke-width="1.5"/>
+      </g>
+
+      <circle r="4.5" fill="var(--cream)" stroke="var(--amber)" stroke-width="2">
+        <animateMotion dur="7s" repeatCount="indefinite" path="M70,180 C 180,180 210,60 420,55"/>
+      </circle>
+      <circle r="4.5" fill="var(--cream)" stroke="var(--cyan)" stroke-width="2">
+        <animateMotion dur="9s" repeatCount="indefinite" path="M70,180 C 190,180 240,120 460,115"/>
+      </circle>
+      <circle r="4.5" fill="var(--cream)" stroke="var(--good)" stroke-width="2">
+        <animateMotion dur="6s" repeatCount="indefinite" path="M70,180 C 180,180 210,225 380,235"/>
+      </circle>
+      <circle r="4.5" fill="var(--cream)" stroke="var(--signal)" stroke-width="2">
+        <animateMotion dur="8s" repeatCount="indefinite" path="M70,180 C 160,180 190,300 380,310"/>
+      </circle>
+    </svg>
+    <div class="map-legend">
+      <span><span class="legend-dot" style="background:var(--good)"></span>ผ่านมาตรฐาน</span>
+      <span><span class="legend-dot" style="background:var(--amber)"></span>รอตรวจ</span>
+      <span><span class="legend-dot" style="background:var(--signal)"></span>ความเสี่ยงสูง</span>
+    </div>
+  </div>
+
+  <div class="panel spotlight-panel">
+    <div class="panel-title">ไฮไลต์ประจำขณะนี้</div>
+
+    <div class="spotlight-slide active" data-slide="0">
+      <h3>🔥 สถานีความเสี่ยงสูงสุด</h3>
+      <div class="spotlight-row"><span>นครราชสีมา</span><span class="tag">78%</span></div>
+      <div class="spotlight-row"><span>อุบลราชธานี</span><span class="tag">74%</span></div>
+      <div class="spotlight-row"><span>หาดใหญ่</span><span class="tag mid">61%</span></div>
+    </div>
+
+    <div class="spotlight-slide" data-slide="1">
+      <h3>🕒 กิจกรรมล่าสุด</h3>
+      <div class="spotlight-row"><span>สมชาย ใจดี อัปโหลดหลักฐาน</span></div>
+      <div class="spotlight-row"><span>กรรณิการ์ฯ ระงับบัญชีผู้ใช้งาน</span></div>
+      <div class="spotlight-row"><span>ผู้โดยสารแจ้งปัญหาที่หาดใหญ่</span></div>
+    </div>
+
+    <div class="spotlight-slide" data-slide="2">
+      <h3>🔮 ข้อมูลเชิงลึกจาก AI</h3>
+      <div class="spotlight-row"><span>คาดอัตราผ่านเกณฑ์รอบหน้า 52.1%</span></div>
+      <div class="spotlight-row"><span>ร้องเรียนจะเพิ่ม ~12% เดือนหน้า</span></div>
+    </div>
+
+    <div class="spotlight-dots" id="spotlight-dots">
+      <span class="active"></span><span></span><span></span>
+    </div>
+  </div>
+
+</div>
+
+<div class="ticker-wrap">
+  <span class="ticker-label">LIVE</span>
+  <div class="ticker-track" id="ticker-track" style="padding-left:140px;"></div>
+</div>
+
+<script>
+(function(){
+  var role = null;
+  try{ role = localStorage.getItem('gecc-role'); }catch(e){}
+  if(role === 'staff'){
+    document.body.innerHTML =
+      '<div style="display:flex;align-items:center;justify-content:center;height:100vh;text-align:center;padding:20px;">' +
+        '<div style="max-width:480px;">' +
+          '<div style="font-size:46px;margin-bottom:16px;">🔒</div>' +
+          '<h1 style="font-size:20px;margin:0 0 10px;color:#F3EEE1;">โหมดจอภาพรวมสำหรับคณะกรรมการ/ผู้บริหารเท่านั้น</h1>' +
+          '<p style="font-size:13.5px;color:#8FA1B3;line-height:1.75;margin:0 0 24px;">หน้าจอนี้แสดงข้อมูลความเสี่ยงระดับประเทศ จึงจำกัดสิทธิ์การเข้าถึงเช่นเดียวกับหน้าภาพรวมประเทศ</p>' +
+          '<a href="gecc-station.html" style="display:inline-block;background:#F2B75B;color:#05080F;text-decoration:none;padding:12px 24px;border-radius:3px;font-size:13.5px;font-weight:700;">ไปที่สถานีของฉัน</a>' +
+        '</div>' +
+      '</div>';
+    return;
+  }
+})();
+</script>
+<script>
+(function(){
+var geccRole = null;
+try{ geccRole = localStorage.getItem('gecc-role'); }catch(e){}
+if(geccRole === 'staff'){ return; }
+
+// live clock
+function updateClock(){
+  const now = new Date();
+  const time = now.toLocaleTimeString('th-TH', { hour12:false });
+  const date = now.toLocaleDateString('th-TH', { weekday:'long', year:'numeric', month:'long', day:'numeric' });
+  document.getElementById('live-clock').textContent = time;
+  document.getElementById('live-date').textContent = date;
+}
+updateClock();
+setInterval(updateClock, 1000);
+
+// count-up animation
+function animateCount(el, target, duration){
+  const start = performance.now();
+  function step(now){
+    const progress = Math.min((now - start) / duration, 1);
+    const eased = 1 - Math.pow(1 - progress, 3);
+    el.textContent = Math.round(eased * target);
+    if(progress < 1){ requestAnimationFrame(step); }
+  }
+  requestAnimationFrame(step);
+}
+document.querySelectorAll('.num[data-target]').forEach(el => {
+  animateCount(el, parseInt(el.dataset.target, 10), 1600);
+});
+setTimeout(() => {
+  document.getElementById('bar-pass').style.width = '47.9%';
+  document.getElementById('bar-csat').style.width = '86%';
+}, 200);
+
+// spotlight rotation
+const slides = document.querySelectorAll('.spotlight-slide');
+const dots = document.querySelectorAll('#spotlight-dots span');
+let slideIndex = 0;
+setInterval(() => {
+  slides[slideIndex].classList.remove('active');
+  dots[slideIndex].classList.remove('active');
+  slideIndex = (slideIndex + 1) % slides.length;
+  slides[slideIndex].classList.add('active');
+  dots[slideIndex].classList.add('active');
+}, 5000);
+
+// ticker content
+const tickerItems = [
+  '⚠️ <b>สถานีนครราชสีมา</b> คะแนนต่ำกว่าเกณฑ์ต่อเนื่อง 2 สัปดาห์',
+  '✅ <b>สถานีอยุธยา</b> อัปโหลดหลักฐานครบ 100% พร้อมส่งตรวจ',
+  '💬 มีเรื่องร้องเรียนใหม่ <b>3 รายการ</b> รอดำเนินการ',
+  '🔮 คาดการณ์อัตราผ่านเกณฑ์รอบหน้า <b>52.1%</b> เพิ่มขึ้นจากรอบก่อน',
+  '📅 มีกำหนดตรวจประเมิน <b>3 สถานี</b> ภายในสัปดาห์นี้',
+  '🧾 รายงานประจำเดือนพร้อมดาวน์โหลดแล้ว',
+  '✨ ตู้แปลภาษาอัตโนมัติมียอดใช้งานเพิ่มขึ้น <b>18%</b>'
+];
+document.getElementById('ticker-track').innerHTML = tickerItems.map(t => '<span>' + t + '</span>').join('') + tickerItems.map(t => '<span>' + t + '</span>').join('');
+
+// ambient particles
+const particleWrap = document.getElementById('particles');
+for(let i=0; i<24; i++){
+  const p = document.createElement('div');
+  p.className = 'particle';
+  p.style.left = Math.random()*100 + 'vw';
+  p.style.bottom = '-10px';
+  p.style.animationDuration = (14 + Math.random()*14) + 's';
+  p.style.animationDelay = (Math.random()*14) + 's';
+  particleWrap.appendChild(p);
+}
+})();
+</script>
+
+</body>
+</html>
