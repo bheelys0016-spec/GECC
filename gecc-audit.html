@@ -430,6 +430,44 @@ const CRITERIA = [
   },
 ];
 
+/* Keep the existing browser-only data model.  State deliberately contains only
+   answers/evidence; the criteria definition is stored separately for versioning. */
+const GECC_AUDIT_STATE_KEY = 'gecc-audit-state';
+const GECC_AUDIT_SCHEMA_KEY = 'gecc-audit-schema';
+const GECC_AUDIT_STATION_KEY = 'gecc-audit-station-name';
+
+function auditStateSnapshot(){
+  return CRITERIA.map(function(criterion){
+    return { id:criterion.id, items:criterion.items.map(function(item){
+      return { no:item.no, checked:!!item.checked, note:item.note || '',
+        driveLink:item.driveLink || '', images:item.images || [],
+        evidenceTime:item.evidenceTime || '', autoChecked:!!item.autoChecked };
+    })};
+  });
+}
+function restoreAuditState(){
+  try{
+    const saved = JSON.parse(localStorage.getItem(GECC_AUDIT_STATE_KEY) || 'null');
+    const savedCriteria = saved && (saved.criteria || saved);
+    if(!Array.isArray(savedCriteria)) return;
+    savedCriteria.forEach(function(savedCriterion){
+      const criterion = CRITERIA.find(function(c){ return c.id === savedCriterion.id; });
+      if(!criterion || !Array.isArray(savedCriterion.items)) return;
+      savedCriterion.items.forEach(function(savedItem){
+        const item = criterion.items.find(function(i){ return i.no === savedItem.no; });
+        if(item) Object.assign(item, savedItem);
+      });
+    });
+  }catch(error){ console.warn('Unable to restore GECC audit state', error); }
+}
+function persistAuditState(){
+  try{
+    localStorage.setItem(GECC_AUDIT_STATE_KEY, JSON.stringify({version:1, criteria:auditStateSnapshot()}));
+    localStorage.setItem(GECC_AUDIT_SCHEMA_KEY, JSON.stringify({version:1, updatedAt:new Date().toISOString(), criteria:CRITERIA.map(function(c){ return {id:c.id, name:c.name, itemCount:c.items.length}; })}));
+  }catch(error){ console.warn('Unable to save GECC audit state', error); }
+}
+restoreAuditState();
+
 let activeCriteria = 1;
 const criteriaPage = { 1:1, 2:1, 3:1 };
 let openPanel = null;
@@ -480,6 +518,7 @@ function toggleItem(critId, no){
   renderTabs();
   renderBody();
   updateProgress();
+  persistAuditState();
 }
 
 function toggleEvidencePanel(critId, no){
@@ -507,9 +546,13 @@ function handleImageUpload(event, critId, no){
   const item = findItem(critId, no);
   if(!item.images) item.images = [];
   const files = Array.from(event.target.files || []);
-  files.forEach(file => {
-    const url = URL.createObjectURL(file);
-    item.images.push({ name: file.name, url: url });
+  files.forEach(function(file){
+    const reader = new FileReader();
+    reader.onload = function(){
+      item.images.push({ name:file.name, url:String(reader.result), mime:file.type || 'image/jpeg' });
+      persistAuditState(); renderTabs(); renderBody(); updateProgress();
+    };
+    reader.readAsDataURL(file);
   });
   event.target.value = '';
   if(files.length && !item.checked){
@@ -517,9 +560,7 @@ function handleImageUpload(event, critId, no){
     item.autoChecked = true;
     item.evidenceTime = timestamp();
   }
-  renderTabs();
-  renderBody();
-  updateProgress();
+  renderTabs(); renderBody(); updateProgress(); persistAuditState();
 }
 
 function removeImage(critId, no, idx){
@@ -532,6 +573,7 @@ function removeImage(critId, no, idx){
   renderTabs();
   renderBody();
   updateProgress();
+  persistAuditState();
 }
 
 function updateNote(critId, no, value){
@@ -553,6 +595,7 @@ function saveEvidence(critId, no){
   renderTabs();
   renderBody();
   updateProgress();
+  persistAuditState();
 }
 
 function renderBody(){
