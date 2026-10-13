@@ -36,24 +36,37 @@
     drawText(page, label, 43, 27, font, 7.5, rgb(0.26,0.32,0.43));
   }
   function dataUriBytes(uri){ const at=uri.indexOf(','); if(at < 0) throw new Error('Invalid saved image'); const body=uri.slice(at+1); if(typeof Buffer !== 'undefined') return Uint8Array.from(Buffer.from(body, 'base64')); const raw=atob(body); return Uint8Array.from(raw, c => c.charCodeAt(0)); }
-  async function appendEvidence(doc, criteria, font){
-    const evidence = flatten(criteria).filter(i => Array.isArray(i.images) && i.images.length);
+  async function appendEvidence(doc, criteria, font, textImageFactory){
+    const evidence = flatten(criteria).filter(i => i.checked || (Array.isArray(i.images) && i.images.length) || i.note || i.driveLink);
     if(!evidence.length) return 0;
     let page, y = 780, added = 0;
     for(const item of evidence){
-      for(const image of item.images){
-        if(!page || y < 175){ page = doc.addPage([595.28,841.89]); added++; y = 785; drawText(page, 'ภาคผนวก: ภาพหลักฐานจากระบบตรวจประเมิน', 42, y, font, 14); y -= 28; }
+      const images = item.images && item.images.length ? item.images : [null];
+      for(const image of images){
+        const rowHeight = image ? 170 : 70;
+        if(!page || y < rowHeight + 45){ page = doc.addPage([595.28,841.89]); added++; y = 785; drawText(page, 'Evidence appendix from Smart Rail GECC audit', 42, y, font, 14); y -= 28; }
         try{
-          const bytes = dataUriBytes(image.url);
-          const embedded = /^data:image\/png/i.test(image.url) ? await doc.embedPng(bytes) : await doc.embedJpg(bytes);
-          const scale = Math.min(230 / embedded.width, 145 / embedded.height, 1);
-          const dims = embedded.scale(scale);
-          page.drawRectangle({x:42,y:y-150,width:245,height:158,borderColor:rgb(.75,.78,.84),borderWidth:.6});
-          page.drawImage(embedded,{x:49,y:y-142,width:dims.width,height:dims.height});
-          drawText(page, 'เกณฑ์ ' + item.criterionId + ' ข้อ ' + item.no, 310, y-16, font, 10);
-          drawText(page, item.note || image.name || 'ภาพหลักฐาน', 310, y-38, font, 9);
-          if(item.driveLink) drawText(page, item.driveLink, 310, y-64, font, 7, rgb(0.04,.30,.72));
-          y -= 170;
+          if(image){
+            const bytes = dataUriBytes(image.url);
+            const embedded = /^data:image\/png/i.test(image.url) ? await doc.embedPng(bytes) : await doc.embedJpg(bytes);
+            const scale = Math.min(230 / embedded.width, 145 / embedded.height, 1);
+            const dims = embedded.scale(scale);
+            page.drawRectangle({x:42,y:y-150,width:245,height:158,borderColor:rgb(.75,.78,.84),borderWidth:.6});
+            page.drawImage(embedded,{x:49,y:y-142,width:dims.width,height:dims.height});
+          }
+          const checkX = image ? 300 : 43, checkY = y - 13;
+          if(item.checked){
+            page.drawLine({start:{x:checkX,y:checkY-5},end:{x:checkX+5,y:checkY-10},thickness:2.2,color:rgb(.05,.55,.28)});
+            page.drawLine({start:{x:checkX+5,y:checkY-10},end:{x:checkX+14,y:checkY+2},thickness:2.2,color:rgb(.05,.55,.28)});
+          }
+          const caption = 'เกณฑ์ที่ ' + item.criterionId + ' ข้อ ' + item.no + '\n' + (item.text || '') + '\n' + (item.note || (image && image.name) || 'ภาพหลักฐาน');
+          if(textImageFactory){
+            const captionImage = await doc.embedPng(dataUriBytes(await textImageFactory(caption, 13, 250)));
+            const maxHeight = image ? 130 : 50, dims = captionImage.scale(Math.min(250 / captionImage.width, maxHeight / captionImage.height, 1));
+            page.drawImage(captionImage,{x:(image?320:65),y:y-10-dims.height,width:dims.width,height:dims.height});
+          } else drawText(page, 'Item ' + item.criterionId + '.' + item.no + ': ' + (item.note || (image && image.name) || 'evidence'), image?320:65, y-28, font, 9);
+          if(item.driveLink) drawText(page, item.driveLink, image?320:65, y-(image?145:54), font, 7, rgb(0.04,.30,.72));
+          y -= rowHeight;
         }catch(error){ console.warn('Skipped unsupported saved evidence image:', image.name, error); }
       }
     }
@@ -73,12 +86,19 @@
     drawText(pages[1], 'Smart Rail audit: physical ' + (result.physicalComplete ? '15/15 complete' : 'incomplete') + ' | quality ' + result.qualityPoints + '/' + result.maxQuality + ' | outcome ' + result.outcomePoints + '/' + result.outcomeMax, 45, 95, font, 8);
     if(!result.schemaValid) drawText(pages[1], 'Schema warning: current audit must be reconciled to 41 items / 70 quality points before a 100-point total is issued.', 45, 80, font, 7, rgb(.70,.12,.12));
     pages.forEach((page, index) => drawPageStamp(page, 'Smart Rail GECC audit export | template page ' + (index+1) + '/' + TEMPLATE_PAGES, font));
-    const appendixPages = options.includeEvidence ? await appendEvidence(doc, criteria, font) : 0;
+    const appendixPages = options.includeEvidence ? await appendEvidence(doc, criteria, font, options.textImageFactory) : 0;
     return {bytes:await doc.save(), summary:Object.assign(result,{templatePages:TEMPLATE_PAGES, appendixPages})};
   }
   async function downloadFromBrowser(options){
     const [templateBytes,fontBytes] = await Promise.all([fetch(options.templateUrl).then(r => { if(!r.ok) throw new Error('Cannot load template PDF'); return r.arrayBuffer(); }), options.fontUrl ? fetch(options.fontUrl).then(r => { if(!r.ok) throw new Error('Cannot load Thai font'); return r.arrayBuffer(); }) : Promise.resolve(null)]);
-    const result = await render(Object.assign({},options,{templateBytes,fontBytes}));
+    const makeThaiTextImage = async function(text, size, width){
+      await document.fonts.ready;
+      const scale=2, lineHeight=size*1.65, words=String(text).split(/\s+/), lines=[], canvas=document.createElement('canvas'), ctx=canvas.getContext('2d');
+      ctx.font=size*scale + 'px Noto Sans Thai'; let line='';
+      words.forEach(function(word){ const next=line ? line+' '+word : word; if(ctx.measureText(next).width > width*scale && line){ lines.push(line); line=word; } else line=next; }); if(line) lines.push(line);
+      canvas.width=width*scale; canvas.height=Math.max(1,(lines.length*lineHeight+10)*scale); ctx.font=size*scale+'px Noto Sans Thai'; ctx.fillStyle='#162033'; ctx.textBaseline='top'; lines.forEach(function(line,index){ctx.fillText(line,0,(index*lineHeight)*scale);}); return canvas.toDataURL('image/png');
+    };
+    const result = await render(Object.assign({},options,{templateBytes,fontBytes,textImageFactory:makeThaiTextImage}));
     const blob = new Blob([result.bytes], {type:'application/pdf'}), url = URL.createObjectURL(blob);
     const a=document.createElement('a'); a.href=url; a.download=options.filename || 'GECC-2569-report.pdf'; a.click(); setTimeout(() => URL.revokeObjectURL(url), 30000);
     return result.summary;

@@ -439,7 +439,7 @@ const GECC_AUDIT_STATION_KEY = 'gecc-audit-station-name';
 function auditStateSnapshot(){
   return CRITERIA.map(function(criterion){
     return { id:criterion.id, items:criterion.items.map(function(item){
-      return { no:item.no, checked:!!item.checked, note:item.note || '',
+      return { no:item.no, text:item.text || '', points:Number(item.points || 0), checked:!!item.checked, note:item.note || '',
         driveLink:item.driveLink || '', images:item.images || [],
         evidenceTime:item.evidenceTime || '', autoChecked:!!item.autoChecked };
     })};
