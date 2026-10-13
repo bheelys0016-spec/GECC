@@ -304,7 +304,7 @@ async function generateReport(){
     try { state = JSON.parse(localStorage.getItem('gecc-audit-state') || '{}'); } catch(e) { throw new Error('ข้อมูลตรวจประเมินเสียหาย'); }
     const savedStation = localStorage.getItem('gecc-audit-station-name');
     const summary = await GECCReportEngine.downloadFromBrowser({
-      templateUrl:'assets/gecc-2569-template.pdf', state:state,
+      templateUrl:'gecc-2569-template.pdf', state:state,
       stationName:savedStation || stationLabel.split(' · ')[1] || stationLabel,
       includeEvidence:checkboxes[4].checked, filename:'GECC-2569-' + stationLabel.split(' ')[0] + '.pdf'
     });
