@@ -9,7 +9,15 @@
   const { PDFDocument, rgb, StandardFonts } = PDFLib;
   const TEMPLATE_PAGES = 22;
 
-  function flatten(criteria){ return (criteria || []).flatMap(function(c){ return (c.items || []).map(function(i){ return Object.assign({criterionId:c.id}, i); }); }); }
+  function criteriaList(value){
+    if(Array.isArray(value)) return value;
+    if(value && Array.isArray(value.criteria)) return value.criteria;
+    /* Older pages may have stored criteria under common wrapper names. */
+    if(value && Array.isArray(value.CITERIA)) return value.CITERIA;
+    if(value && Array.isArray(value.CRIERIA)) return value.CRIERIA;
+    return [];
+  }
+  function flatten(criteria){ return criteriaList(criteria).flatMap(function(c){ return (c.items || []).map(function(i){ return Object.assign({criterionId:c.id}, i); }); }); }
   function score(criteria){
     const all = flatten(criteria), physical = all.filter(i => i.criterionId === 1), quality = all.filter(i => i.criterionId === 2), outcome = all.filter(i => i.criterionId === 3);
     const qualityPoints = quality.filter(i => i.checked).reduce((sum, i) => sum + Number(i.points || 0), 0);
@@ -59,7 +67,7 @@
     // PDF base-14 Latin glyphs because PDF-Lib does not perform Thai shaping;
     // this prevents broken tone marks while preserving every Thai template glyph.
     const font = await doc.embedFont(StandardFonts.Helvetica);
-    const criteria = state.criteria || state || [];
+    const criteria = criteriaList(state);
     const result = score(criteria);
     const pages = doc.getPages();
     drawText(pages[1], 'Smart Rail audit: physical ' + (result.physicalComplete ? '15/15 complete' : 'incomplete') + ' | quality ' + result.qualityPoints + '/' + result.maxQuality + ' | outcome ' + result.outcomePoints + '/' + result.outcomeMax, 45, 95, font, 8);
