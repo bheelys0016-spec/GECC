@@ -278,6 +278,8 @@
     box-shadow: 0 14px 30px -10px rgba(17,19,39,0.6);
   }
 
+  .to-report-btn{ display:inline-block; margin-left:12px; font-family:var(--font-th); font-size:12.5px; font-weight:600; padding:8px 14px; border-radius:20px; background:linear-gradient(135deg, var(--ink), #2E3358); color:var(--cream); text-decoration:none; white-space:nowrap; }
+  .to-report-btn:hover{ transform:translateY(-1px); }
 </style>
 </head>
 <body>
@@ -315,6 +317,7 @@
       กำลังประเมิน:
       <select><option>BKK-004 · สถานีกรุงเทพ (หัวลำโพง)</option></select>
     </div>
+    <a class="to-report-btn" href="gecc-report.html">📄 สร้างรายงานจากข้อมูลนี้ →</a>
   </div>
 
   <div class="layout">
@@ -430,49 +433,74 @@ const CRITERIA = [
   },
 ];
 
-/* Keep the existing browser-only data model.  State deliberately contains only
-   answers/evidence; the criteria definition is stored separately for versioning. */
-const GECC_AUDIT_STATE_KEY = 'gecc-audit-state';
-const GECC_AUDIT_SCHEMA_KEY = 'gecc-audit-schema';
-const GECC_AUDIT_STATION_KEY = 'gecc-audit-station-name';
-
-function auditStateSnapshot(){
-  return CRITERIA.map(function(criterion){
-    return { id:criterion.id, items:criterion.items.map(function(item){
-      return { no:item.no, text:item.text || '', points:Number(item.points || 0), checked:!!item.checked, note:item.note || '',
-        driveLink:item.driveLink || '', images:item.images || [],
-        evidenceTime:item.evidenceTime || '', autoChecked:!!item.autoChecked };
-    })};
-  });
-}
-function restoreAuditState(){
-  try{
-    const saved = JSON.parse(localStorage.getItem(GECC_AUDIT_STATE_KEY) || 'null');
-    const savedCriteria = saved && (saved.criteria || saved);
-    if(!Array.isArray(savedCriteria)) return;
-    savedCriteria.forEach(function(savedCriterion){
-      const criterion = CRITERIA.find(function(c){ return c.id === savedCriterion.id; });
-      if(!criterion || !Array.isArray(savedCriterion.items)) return;
-      savedCriterion.items.forEach(function(savedItem){
-        const item = criterion.items.find(function(i){ return i.no === savedItem.no; });
-        if(item) Object.assign(item, savedItem);
-      });
-    });
-  }catch(error){ console.warn('Unable to restore GECC audit state', error); }
-}
-function persistAuditState(){
-  try{
-    localStorage.setItem(GECC_AUDIT_STATE_KEY, JSON.stringify({version:1, criteria:auditStateSnapshot()}));
-    localStorage.setItem(GECC_AUDIT_SCHEMA_KEY, JSON.stringify({version:1, updatedAt:new Date().toISOString(), criteria:CRITERIA.map(function(c){ return {id:c.id, name:c.name, itemCount:c.items.length}; })}));
-  }catch(error){ console.warn('Unable to save GECC audit state', error); }
-}
-restoreAuditState();
-
 let activeCriteria = 1;
 const criteriaPage = { 1:1, 2:1, 3:1 };
 let openPanel = null;
 
 function evKey(critId, no){ return critId + '_' + no; }
+
+// ===== Persistence: checked state, notes, Drive links and photo evidence (data URLs) =====
+const LS_AUDIT = 'gecc-audit-state';
+const LS_STATION_NAME = 'gecc-audit-station-name';
+
+function saveAuditState(){
+  const state = {};
+  CRITERIA.forEach(crit => {
+    crit.items.forEach(it => {
+      if(it.checked || it.note || it.driveLink || (it.images && it.images.length)){
+        state[evKey(crit.id, it.no)] = {
+          checked: !!it.checked, autoChecked: !!it.autoChecked,
+          note: it.note || '', driveLink: it.driveLink || '',
+          evidenceTime: it.evidenceTime || '', images: it.images || []
+        };
+      }
+    });
+  });
+  try{ localStorage.setItem(LS_AUDIT, JSON.stringify(state)); return true; }catch(e){ return false; }
+}
+
+function loadAuditState(){
+  let state = {};
+  try{ state = JSON.parse(localStorage.getItem(LS_AUDIT) || '{}'); }catch(e){ state = {}; }
+  CRITERIA.forEach(crit => {
+    crit.items.forEach(it => {
+      const s = state[evKey(crit.id, it.no)];
+      if(s){
+        it.checked = s.checked; it.autoChecked = s.autoChecked;
+        it.note = s.note; it.driveLink = s.driveLink;
+        it.evidenceTime = s.evidenceTime; it.images = s.images || [];
+      }
+    });
+  });
+}
+
+function saveAuditSchema(){
+  try{
+    const schema = CRITERIA.map(c => ({ id:c.id, name:c.name, meta:c.meta, items:c.items.map(i => ({ no:i.no, text:i.text, group:i.group || '', badge:i.badge || '', points:i.points || 0 })) }));
+    localStorage.setItem('gecc-audit-schema', JSON.stringify(schema));
+  }catch(e){}
+}
+
+function downscaleImageToDataURL(file, maxSide){
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = reject;
+    reader.onload = () => {
+      const img = new Image();
+      img.onerror = reject;
+      img.onload = () => {
+        const scale = Math.min(1, maxSide / Math.max(img.width, img.height));
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.round(img.width * scale);
+        canvas.height = Math.round(img.height * scale);
+        canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+        resolve(canvas.toDataURL('image/jpeg', 0.72));
+      };
+      img.src = reader.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
 
 function timestamp(){
   const d = new Date();
@@ -518,7 +546,7 @@ function toggleItem(critId, no){
   renderTabs();
   renderBody();
   updateProgress();
-  persistAuditState();
+  saveAuditState();
 }
 
 function toggleEvidencePanel(critId, no){
@@ -542,25 +570,28 @@ function hasEvidenceOf(item){
   return (item.images && item.images.length) || (item.note && item.note.trim()) || (item.driveLink && item.driveLink.trim());
 }
 
-function handleImageUpload(event, critId, no){
+async function handleImageUpload(event, critId, no){
   const item = findItem(critId, no);
   if(!item.images) item.images = [];
   const files = Array.from(event.target.files || []);
-  files.forEach(function(file){
-    const reader = new FileReader();
-    reader.onload = function(){
-      item.images.push({ name:file.name, url:String(reader.result), mime:file.type || 'image/jpeg' });
-      persistAuditState(); renderTabs(); renderBody(); updateProgress();
-    };
-    reader.readAsDataURL(file);
-  });
   event.target.value = '';
-  if(files.length && !item.checked){
+  let added = false;
+  for(const file of files){
+    try{
+      const url = await downscaleImageToDataURL(file, 900);
+      item.images.push({ name: file.name, url: url });
+      added = true;
+    }catch(e){}
+  }
+  if(added && !item.checked){
     item.checked = true;
     item.autoChecked = true;
     item.evidenceTime = timestamp();
   }
-  renderTabs(); renderBody(); updateProgress(); persistAuditState();
+  renderTabs();
+  renderBody();
+  updateProgress();
+  if(!saveAuditState()) alert('พื้นที่จัดเก็บในเบราว์เซอร์เต็ม รูปอาจไม่ถูกบันทึกถาวร');
 }
 
 function removeImage(critId, no, idx){
@@ -573,21 +604,22 @@ function removeImage(critId, no, idx){
   renderTabs();
   renderBody();
   updateProgress();
-  persistAuditState();
+  saveAuditState();
 }
 
 function updateNote(critId, no, value){
   findItem(critId, no).note = value;
+  saveAuditState();
 }
 
 function updateDrive(critId, no, value){
   findItem(critId, no).driveLink = value;
+  saveAuditState();
 }
 
 function saveEvidence(critId, no){
   const item = findItem(critId, no);
-  const hasEvidence = (item.images && item.images.length) || (item.note && item.note.trim()) || (item.driveLink && item.driveLink.trim());
-  if(hasEvidence){
+  if(hasEvidenceOf(item)){
     item.checked = true;
     item.evidenceTime = timestamp();
   }
@@ -595,7 +627,7 @@ function saveEvidence(critId, no){
   renderTabs();
   renderBody();
   updateProgress();
-  persistAuditState();
+  saveAuditState();
 }
 
 function renderBody(){
@@ -732,9 +764,15 @@ function runAudit(){
   }, 1800);
 }
 
+loadAuditState();
+saveAuditSchema();
 renderTabs();
 renderBody();
 updateProgress();
+try{
+  const stSel = document.querySelector('.station-select select');
+  if(stSel) localStorage.setItem(LS_STATION_NAME, stSel.value);
+}catch(e){}
 </script>
 
 
