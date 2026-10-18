@@ -280,6 +280,15 @@
 
   .to-report-btn{ display:inline-block; margin-left:12px; font-family:var(--font-th); font-size:12.5px; font-weight:600; padding:8px 14px; border-radius:20px; background:linear-gradient(135deg, var(--ink), #2E3358); color:var(--cream); text-decoration:none; white-space:nowrap; }
   .to-report-btn:hover{ transform:translateY(-1px); }
+  .agency-box{ background:var(--surface-alt); border:1px solid var(--amber-dim); border-radius:12px; padding:10px 14px; margin:0 0 10px; }
+  .agency-box label{ display:block; font-size:11.5px; color:var(--text-dim); margin-bottom:6px; font-weight:600; }
+  .agency-box select{ font-family:var(--font-th); font-size:13px; padding:7px 10px; border:1px solid var(--input-border); border-radius:10px; background:var(--surface); color:var(--text-strong); max-width:100%; }
+  .agency-hint{ font-size:11px; color:var(--amber-dim); margin-top:6px; }
+  .item-detail{ font-size:12.5px; color:var(--text-dim); margin-top:4px; line-height:1.55; font-weight:400; }
+  .sub-list{ margin:8px 0 6px; padding:8px 12px; border:1px dashed var(--input-border); border-radius:10px; background:var(--surface-alt); }
+  .sub-cap{ font-size:11.5px; color:var(--text-dim); margin-bottom:5px; font-weight:600; }
+  .sub-item{ display:flex; align-items:flex-start; gap:8px; font-size:12.5px; padding:2px 0; cursor:pointer; }
+  .sub-item input{ margin-top:3px; accent-color:var(--good); }
 </style>
 </head>
 <body>
@@ -419,6 +428,38 @@ const CRITERIA = [
       { no:'5.3', group:'๕. เงื่อนไขพิเศษเพิ่มเติม', text:'ขับเคลื่อนบริการด้วยนวัตกรรมและเทคโนโลยีทั้งบริการหน้าบ้านและกระบวนการทำงาน', badge:'เพิ่มเติม', points:3, checked:false },
       { no:'5.4', group:'๕. เงื่อนไขพิเศษเพิ่มเติม', text:'ความเป็นต้นแบบ และการขยายผลการบริการที่เป็นเลิศ', badge:'เพิ่มเติม', points:2, checked:false },
       { no:'5.5', group:'๕. เงื่อนไขพิเศษเพิ่มเติม', text:'มีระบบในการป้องกันการเกิดปัญหา เพื่อไม่ให้ลุกลาม', badge:'เพิ่มเติม', points:2, checked:false },
+      { no:'5.6', group:'๕. เงื่อนไขพิเศษเพิ่มเติม (๕ คะแนน) แสดงหลักฐานเชิงประจักษ์ทุกข้อที่มีการดำเนินการ', agencyGroup:true, text:'การแก้ไขปัญหา เพื่อให้สามารถเข้าถึงบริการได้อย่างเท่าเทียม', badge:'เพิ่มเติม', points:1, checked:false, variants:[
+        'มีระบบการบริหารจัดการของหน่วยงานในการลดความแออัดและระยะเวลารอคอยในการรับบริการ (เช่น telemedicine การรับยาที่บ้าน)',
+        'หน่วยงานมีการดำเนินการที่จะทำให้ผู้รับบริการเข้าถึงสาธารณูปโภค/บริการที่เป็นมาตรฐานโดยไม่ต้องร้องขอ และกรณีที่สาธารณูปโภคขาดความต่อเนื่อง (เช่น น้ำไม่ไหล ไฟดับ) จะมีมาตรการในการดำเนินการได้อย่างรวดเร็ว',
+        'หน่วยงานมีการนำข้อมูลเชิงลึกในพื้นที่ มาส่งเสริมหรือผลักดันนโยบายให้เข้าถึงแหล่งความรู้ แหล่งเงินทุน และโอกาสของประชาชน',
+        'นอกจากการดำเนินการตามกฎหมาย/บังคับใช้กฎหมาย หน่วยงานมีการช่วยเหลือประชาชนให้เข้าถึงบริการพื้นฐาน รวมทั้งมีแนวทางในการแก้ไขปัญหาที่ต้นตอ',
+        'หน่วยงานมีการนำข้อมูลเชิงลึกในพื้นที่มาออกแบบบริการที่ลดความยุ่งยาก ซับซ้อน'] },
+      { no:'5.7', group:'๕. เงื่อนไขพิเศษเพิ่มเติม (๕ คะแนน) แสดงหลักฐานเชิงประจักษ์ทุกข้อที่มีการดำเนินการ', agencyGroup:true, text:'การบูรณาการการทำงานร่วมกับหน่วยงานและภาคส่วนอื่น', badge:'เพิ่มเติม', points:1, checked:false, variants:[
+        'มีการบูรณาการการทำงานร่วมกับหน่วยงานอื่นในการจัดหามาตรการด้านสาธารณสุข และกรณีของโรงพยาบาลมีการบูรณาการการทำงานระหว่างโรงพยาบาลในการส่งต่อผู้ป่วย โดยเฉพาะในพื้นที่ห่างไกล',
+        'มีการบูรณาการการทำงานร่วมกับหน่วยงานและภาคส่วนอื่นในการจัดหาสาธารณูปโภค และการป้องกันเหตุที่อาจส่งผลกระทบต่อประชาชน',
+        'มีการบูรณาการการทำงานร่วมกับภาคส่วนอื่น เพื่อส่งเสริมการใช้ทรัพยากรและขับเคลื่อนเศรษฐกิจในทุกระดับ',
+        'มีการบูรณาการการทำงานร่วมกับภาคส่วนอื่น เพื่อยกระดับคุณภาพชีวิตประชาชนให้มีภูมิคุ้มกันทางสังคม',
+        'มีการบูรณาการการทำงานที่ตอบสนองความต้องการของผู้รับบริการ รวมทั้งตอบสนองนโยบายที่สำคัญของประเทศ'] },
+      { no:'5.8', group:'๕. เงื่อนไขพิเศษเพิ่มเติม (๕ คะแนน) แสดงหลักฐานเชิงประจักษ์ทุกข้อที่มีการดำเนินการ', agencyGroup:true, text:'การติดต่อหน่วยงาน และการตรวจสอบข้อมูลของผู้รับบริการด้วยตนเอง', badge:'เพิ่มเติม', points:1, checked:false, variants:[
+        'หน่วยงานมีช่องทางการติดต่อฉุกเฉินที่ติดต่อได้ตลอด ๒๔ ชม. และมีการตอบสนองต่อเหตุอย่างรวดเร็ว รวมทั้งมีช่องทางที่ให้ประชาชนสามารถตรวจสอบข้อมูล/ประวัติการรักษาพยาบาลของตนเองได้โดยง่าย',
+        'หน่วยงานมีช่องทางการติดต่อฉุกเฉินที่ติดต่อได้ตลอด ๒๔ ชม. และมีการตอบสนองต่อเหตุอย่างรวดเร็ว รวมทั้งมีช่องทางที่ให้ประชาชนสามารถตรวจสอบข้อมูลของตนเองได้โดยง่าย',
+        'หน่วยงานมีช่องทางการติดต่อและการเข้าถึงที่ง่ายไม่ซับซ้อน เพื่อให้ประชาชนสามารถใช้บริการได้ทันที รวมทั้งมีช่องทางที่ให้ประชาชนสามารถตรวจสอบข้อมูลของตนเองได้โดยง่าย',
+        'หน่วยงานมีช่องทางการติดต่อและการเข้าถึงที่ง่ายไม่ซับซ้อน เพื่อให้ประชาชนสามารถใช้บริการได้ทันที รวมทั้งมีช่องทางที่ให้ประชาชนสามารถตรวจสอบข้อมูลของตนเองได้โดยง่าย',
+        'หน่วยงานมีช่องทางการติดต่อและการเข้าถึงที่ง่ายไม่ซับซ้อน เพื่อให้ประชาชนสามารถใช้บริการได้ทันที รวมทั้งมีช่องทางที่ให้ประชาชนสามารถตรวจสอบข้อมูลของตนเองได้โดยง่าย'] },
+      { no:'5.9', group:'๕. เงื่อนไขพิเศษเพิ่มเติม (๕ คะแนน) แสดงหลักฐานเชิงประจักษ์ทุกข้อที่มีการดำเนินการ', agencyGroup:true, text:'องค์ความรู้ของบุคลากรและการสื่อสารมีความชัดเจน (ยกตัวอย่างสถานการณ์ที่เกิดขึ้น)', badge:'เพิ่มเติม', points:1, checked:false, variants:[
+        'บุคลากรมีองค์ความรู้ที่สามารถให้คำปรึกษาแนะนำ และมีความเข้าอกเข้าใจผู้ป่วย เพื่อให้บริการด้วยความเต็มใจ',
+        'บุคลากรมีองค์ความรู้ที่สามารถให้คำปรึกษาแนะนำ และมีข้อมูลของผู้รับบริการ แบบรายพื้นที่/รายบุคคล เพื่อให้ความต้องการได้ตรงกับสภาพของปัญหา',
+        'บุคลากรมีองค์ความรู้ที่ครอบคลุมที่สามารถให้คำปรึกษาแนะนำในการแก้ไขปัญหาด้านเศรษฐกิจ',
+        'บุคลากรมีองค์ความรู้ด้านกฎหมายและกระบวนการยุติธรรมที่สามารถให้คำปรึกษาและแก้ไขปัญหาของผู้รับบริการ',
+        'บุคลากรมีองค์ความรู้และการสื่อสารเกี่ยวกับภารกิจของหน่วยงานแก่ผู้รับบริการได้อย่างชัดเจน'] },
+      { no:'5.10', group:'๕. เงื่อนไขพิเศษเพิ่มเติม (๕ คะแนน) แสดงหลักฐานเชิงประจักษ์ทุกข้อที่มีการดำเนินการ', agencyGroup:true, text:'การพัฒนาระบบดิจิทัลในงานบริการที่สำคัญของหน่วยงาน (หน่วยงานจะต้องดำเนินการให้ครบถ้วนทุกระบบ)', badge:'เพิ่มเติม', points:1, checked:false,
+        variants:['','','','',''],
+        subsVariants:[
+          ['มีระบบจองคิวล่วงหน้า','telemedicine/การให้คำปรึกษาผ่านช่องทางออนไลน์','มีช่องทางการสื่อสารทางอิเล็กทรอนิกส์อย่างน้อย ๒ ช่องทาง','มีระบบการชำระเงินผ่าน e-payment'],
+          ['มีระบบแจ้งเตือนและติดตามสถานะการให้บริการ','มีระบบยื่นคำขอ','มีระบบส่งเอกสารทางอิเล็กทรอนิกส์','มีระบบการชำระเงินผ่าน e-payment','มีระบบเชื่อมโยงและแลกเปลี่ยนข้อมูล'],
+          ['มีระบบตรวจสอบสิทธิ์','มีระบบยื่นคำขอ','มีระบบส่งเอกสารทางอิเล็กทรอนิกส์','มีระบบการชำระเงินผ่าน e-payment (ในกรณีที่มีการชำระเงิน)','มีระบบเชื่อมโยงและแลกเปลี่ยนข้อมูล'],
+          ['มีระบบตรวจสอบสิทธิ์','มีระบบแจ้งเตือนและติดตามสถานะให้บริการ','มีระบบยื่นคำขอ','มีระบบส่งเอกสารทางอิเล็กทรอนิกส์','มีระบบเชื่อมโยงและแลกเปลี่ยนข้อมูล'],
+          ['มีระบบตรวจสอบข้อมูล','มีระบบยื่นคำขอ','มีระบบส่งเอกสารทางอิเล็กทรอนิกส์','มีระบบการชำระเงินผ่าน e-payment (ในกรณีที่มีการชำระเงิน)','มีระบบเชื่อมโยงและแลกเปลี่ยนข้อมูล']] },
     ]
   },
   {
@@ -432,6 +473,24 @@ const CRITERIA = [
     ]
   },
 ];
+
+const AGENCY_TYPES = [
+  { key:'health', name:'ด้านสาธารณสุข' },
+  { key:'utility', name:'ด้านสาธารณูปโภค' },
+  { key:'economy', name:'ด้านเศรษฐกิจ' },
+  { key:'social', name:'ด้านสังคมและกระบวนการยุติธรรม' },
+  { key:'other', name:'ด้านอื่นๆ' }
+];
+let agencyIdx = 1; // การรถไฟแห่งประเทศไทย = ด้านสาธารณูปโภค
+
+function applyAgency(){
+  CRITERIA.forEach(c => c.items.forEach(it => {
+    if(it.variants){
+      it.detail = it.variants[agencyIdx] || '';
+      it.subs = it.subsVariants ? it.subsVariants[agencyIdx] : null;
+    }
+  }));
+}
 
 let activeCriteria = 1;
 const criteriaPage = { 1:1, 2:1, 3:1 };
@@ -447,21 +506,24 @@ function saveAuditState(){
   const state = {};
   CRITERIA.forEach(crit => {
     crit.items.forEach(it => {
-      if(it.checked || it.note || it.driveLink || (it.images && it.images.length)){
+      if(it.checked || it.note || it.driveLink || (it.images && it.images.length) || (it.subChecks && Object.keys(it.subChecks).length)){
         state[evKey(crit.id, it.no)] = {
           checked: !!it.checked, autoChecked: !!it.autoChecked,
           note: it.note || '', driveLink: it.driveLink || '',
-          evidenceTime: it.evidenceTime || '', images: it.images || []
+          evidenceTime: it.evidenceTime || '', images: it.images || [],
+          subChecks: it.subChecks || {}
         };
       }
     });
   });
+  state.__meta = { agencyIdx: agencyIdx };
   try{ localStorage.setItem(LS_AUDIT, JSON.stringify(state)); return true; }catch(e){ return false; }
 }
 
 function loadAuditState(){
   let state = {};
   try{ state = JSON.parse(localStorage.getItem(LS_AUDIT) || '{}'); }catch(e){ state = {}; }
+  if(state.__meta && typeof state.__meta.agencyIdx === 'number') agencyIdx = state.__meta.agencyIdx;
   CRITERIA.forEach(crit => {
     crit.items.forEach(it => {
       const s = state[evKey(crit.id, it.no)];
@@ -469,6 +531,7 @@ function loadAuditState(){
         it.checked = s.checked; it.autoChecked = s.autoChecked;
         it.note = s.note; it.driveLink = s.driveLink;
         it.evidenceTime = s.evidenceTime; it.images = s.images || [];
+        it.subChecks = s.subChecks || {};
       }
     });
   });
@@ -476,7 +539,8 @@ function loadAuditState(){
 
 function saveAuditSchema(){
   try{
-    const schema = CRITERIA.map(c => ({ id:c.id, name:c.name, meta:c.meta, items:c.items.map(i => ({ no:i.no, text:i.text, group:i.group || '', badge:i.badge || '', points:i.points || 0 })) }));
+    const schema = CRITERIA.map(c => ({ id:c.id, name:c.name, meta:c.meta, agency:(c.id === 2 ? { idx:agencyIdx, name:AGENCY_TYPES[agencyIdx].name } : null),
+      items:c.items.map(i => ({ no:i.no, text:i.text, detail:i.detail || '', subs:i.subs || null, group:i.group || '', badge:i.badge || '', points:i.points || 0 })) }));
     localStorage.setItem('gecc-audit-schema', JSON.stringify(schema));
   }catch(e){}
 }
@@ -540,8 +604,41 @@ function findItem(critId, no){
   return crit.items.find(i => i.no === no);
 }
 
+function setAgency(idx){
+  agencyIdx = idx;
+  applyAgency();
+  CRITERIA.forEach(c => c.items.forEach(it => {
+    if(it.subs){ it.subChecks = it.subChecks || {}; it.checked = it.subs.every(s => it.subChecks[s]); }
+  }));
+  renderTabs();
+  renderBody();
+  updateProgress();
+  saveAuditState();
+  saveAuditSchema();
+}
+
+function toggleSub(critId, no, idx){
+  const item = findItem(critId, no);
+  if(!item.subChecks) item.subChecks = {};
+  const s = item.subs[idx];
+  item.subChecks[s] = !item.subChecks[s];
+  item.checked = item.subs.every(x => item.subChecks[x]);
+  renderTabs();
+  renderBody();
+  updateProgress();
+  saveAuditState();
+}
+
 function toggleItem(critId, no){
   const item = findItem(critId, no);
+  if(item.subs){
+    item.subChecks = item.subChecks || {};
+    const all = !item.subs.every(s => item.subChecks[s]);
+    item.subs.forEach(s => { item.subChecks[s] = all; });
+    item.checked = all;
+    renderTabs(); renderBody(); updateProgress(); saveAuditState();
+    return;
+  }
   item.checked = !item.checked;
   renderTabs();
   renderBody();
@@ -643,6 +740,11 @@ function renderBody(){
     let groupHtml = '';
     if(it.group && it.group !== lastGroup){
       groupHtml = `<div class="group-label">${it.group}</div>`;
+      if(it.agencyGroup){
+        groupHtml += `<div class="agency-box"><label>ลักษณะการให้บริการของหน่วยงาน (เลือกเพื่อแสดงเกณฑ์ที่ตรงกับหน่วยงาน)</label>
+          <select onchange="setAgency(parseInt(this.value, 10))">${AGENCY_TYPES.map((a, i) => `<option value="${i}" ${i === agencyIdx ? 'selected' : ''}>${a.name}</option>`).join('')}</select>
+          <div class="agency-hint">การรถไฟแห่งประเทศไทยจัดอยู่ใน “ด้านสาธารณูปโภค” ตามบัญชีการจำแนกหน่วยงานของหลักเกณฑ์ GECC ๒๕๖๙</div></div>`;
+      }
       lastGroup = it.group;
     }
     const badgeClass = it.badge && it.badge.indexOf('☺') !== -1 ? 'advanced' : (it.badge === '10 คะแนน' ? 'outcome' : '');
@@ -695,9 +797,10 @@ function renderBody(){
         <input type="checkbox" ${it.checked ? 'checked' : ''} onchange="toggleItem(${crit.id}, '${it.no}')">
         <div class="item-body">
           <div class="item-top-row">
-            <div class="item-title"><span class="item-no">${it.no}.</span>${it.text}</div>
+            <div class="item-title"><span class="item-no">${it.no}.</span>${it.text}${it.detail ? `<div class="item-detail">${it.detail}</div>` : ''}</div>
             ${badgeHtml}
           </div>
+          ${it.subs ? `<div class="sub-list"><div class="sub-cap">ต้องดำเนินการให้ครบทุกระบบจึงจะได้คะแนน (${AGENCY_TYPES[agencyIdx].name}):</div>${it.subs.map((s, i) => `<label class="sub-item"><input type="checkbox" ${it.subChecks && it.subChecks[s] ? 'checked' : ''} onchange="toggleSub(${crit.id}, '${it.no}', ${i})"><span>${s}</span></label>`).join('')}</div>` : ''}
           <div class="item-evidence">
             <button class="upload-btn ${hasEvidence ? 'done' : ''}" onclick="toggleEvidencePanel(${crit.id}, '${it.no}')">${hasEvidence ? '✓ แนบหลักฐานแล้ว (แก้ไข)' : '📎 แนบหลักฐาน'}</button>
             <span class="evidence-tag ${hasEvidence && !isOpen ? 'show' : ''}">✓ บันทึกแล้ว${it.evidenceTime ? ' · ' + it.evidenceTime : ''}</span>
@@ -765,6 +868,7 @@ function runAudit(){
 }
 
 loadAuditState();
+applyAgency();
 saveAuditSchema();
 renderTabs();
 renderBody();
