@@ -268,7 +268,7 @@
       <div class="section-list">
         <label class="section-item"><input type="checkbox" checked disabled> หน้าปก + ตารางเกณฑ์ระดับมาตรฐาน ๓ ระดับ</label>
         <label class="section-item"><input type="checkbox" id="opt-c1" checked> เกณฑ์ที่ ๑ ด้านกายภาพ (๑๕ ข้อ)</label>
-        <label class="section-item"><input type="checkbox" id="opt-c2" checked> เกณฑ์ที่ ๒ ด้านคุณภาพ (๓๖ ข้อ)</label>
+        <label class="section-item"><input type="checkbox" id="opt-c2" checked> เกณฑ์ที่ ๒ ด้านคุณภาพ (๔๑ ข้อ รวมเงื่อนไขพิเศษ ๕ คะแนน)</label>
         <label class="section-item"><input type="checkbox" id="opt-c3" checked> เกณฑ์ที่ ๓ ด้านผลลัพธ์ (๓ ข้อ)</label>
         <label class="section-item"><input type="checkbox" id="opt-thumbs" checked> แสดงรูปหลักฐานย่อในตาราง</label>
         <label class="section-item"><input type="checkbox" id="opt-appendix"> ภาคผนวก: รูปหลักฐานขนาดใหญ่</label>
@@ -442,6 +442,8 @@ const RP_CSS = `
 .band{ background:#f6c8a1; border:1px solid #111; font-weight:700; padding:4px 8px; font-size:15.5px; }
 .band-sub{ padding:8px 0 6px 18px; font-size:14.5px; }
 .blkpad{ padding-bottom:8px; }
+.blkpad + .blkpad{ padding-top:2px; }
+.rp-table + .blkpad, .ag-table + .blkpad{ padding-top:12px; }
 .rp-table{ width:680px; margin:0 1px; border-collapse:collapse; table-layout:fixed; font-size:14px; }
 .rp-table th, .rp-table td{ border:1px solid #111; padding:4px 7px; vertical-align:top; }
 .rp-table th{ background:#e4e4e4; font-weight:700; text-align:center; font-size:14.5px; }
@@ -462,6 +464,22 @@ const RP_CSS = `
 .ev .evr{ margin:1px 0; word-break:break-word; }
 .ev-imgs{ display:flex; flex-wrap:wrap; gap:4px; margin-top:3px; }
 .ev-imgs img{ display:block; border:1px solid #bbb; }
+.ag-table{ width:677px; margin:0 1px; border-collapse:collapse; table-layout:fixed; font-size:11.5px; }
+.ag-table th, .ag-table td{ border:1px solid #111; padding:4px 5px; vertical-align:top; }
+.ag-table th.agh1{ background:#bdd7ee; font-size:13.5px; text-align:center; font-weight:700; padding:4px; }
+.ag-table th.agh2{ background:#dbe9f7; text-align:center; font-weight:700; font-size:13px; }
+.ag-table th.agh3{ background:#dbe9f7; text-align:center; font-weight:700; font-size:12px; }
+.ag-table th.agh3.agsel{ background:#fff2cc; }
+.agmark{ display:block; font-size:10.5px; color:#8a5a00; font-weight:700; }
+.ag-table td.agt{ font-size:12.5px; }
+.agt .agn{ font-size:11.5px; margin-top:4px; }
+.agt .agres{ display:flex; align-items:center; gap:5px; margin-top:6px; font-weight:600; font-size:12px; }
+.agc{ display:flex; gap:5px; align-items:flex-start; margin:0 0 3px; }
+.agc svg{ margin-top:2px; }
+.ag-table td.agsel{ background:#fffbe9; }
+.ag-table td.agmut{ color:#555; }
+.ag-table td.agev{ padding:3px 4px; }
+.cv-info .row.ag{ margin-top:3px; }
 .apx-h{ font-size:16px; font-weight:700; background:#dbeaf7; border:1px solid #111; padding:4px 8px; }
 .apx-b{ border:1px solid #111; border-top:none; padding:8px 10px; }
 .apx-t{ font-size:13.5px; margin-bottom:4px; }
@@ -472,20 +490,55 @@ const RP_CSS = `
 `;
 
 // ---------- Data ----------
-const RP_G = ['๑. ด้านสถานที่','๒. ด้านบริการ','๓. ด้านบุคลากร','๔. ด้านเทคโนโลยี','๕. เงื่อนไขพิเศษเพิ่มเติม'];
+const RP_G = ['๑. ด้านสถานที่','๒. ด้านบริการ','๓. ด้านบุคลากร','๔. ด้านเทคโนโลยี','๕. เงื่อนไขพิเศษเพิ่มเติม','๕. เงื่อนไขพิเศษเพิ่มเติม (๕ คะแนน) แสดงหลักฐานเชิงประจักษ์ทุกข้อที่มีการดำเนินการ'];
+const RP_AG_ITEMS = ['5.6','5.7','5.8','5.9','5.10'];
+const RP_AG_NAMES = ['ด้านสาธารณสุข','ด้านสาธารณูปโภค','ด้านเศรษฐกิจ','ด้านสังคมและกระบวนการยุติธรรม','ด้านอื่นๆ'];
+const RP_AG_ROWS = [
+ { title:'๑. การแก้ไขปัญหา เพื่อให้สามารถเข้าถึงบริการได้อย่างเท่าเทียม (๑ คะแนน)', cells:[
+   'มีระบบการบริหารจัดการของหน่วยงานในการลดความแออัดและระยะเวลารอคอยในการรับบริการ (เช่น telemedicine การรับยาที่บ้าน)',
+   'หน่วยงานมีการดำเนินการที่จะทำให้ผู้รับบริการเข้าถึงสาธารณูปโภค/บริการที่เป็นมาตรฐานโดยไม่ต้องร้องขอ และกรณีที่สาธารณูปโภคขาดความต่อเนื่อง (เช่น น้ำไม่ไหล ไฟดับ) จะมีมาตรการในการดำเนินการได้อย่างรวดเร็ว',
+   'หน่วยงานมีการนำข้อมูลเชิงลึกในพื้นที่ มาส่งเสริมหรือผลักดันนโยบายให้เข้าถึงแหล่งความรู้ แหล่งเงินทุน และโอกาสของประชาชน',
+   'นอกจากการดำเนินการตามกฎหมาย/บังคับใช้กฎหมาย หน่วยงานมีการช่วยเหลือประชาชนให้เข้าถึงบริการพื้นฐาน รวมทั้งมีแนวทางในการแก้ไขปัญหาที่ต้นตอ',
+   'หน่วยงานมีการนำข้อมูลเชิงลึกในพื้นที่มาออกแบบบริการที่ลดความยุ่งยาก ซับซ้อน'] },
+ { title:'๒. การบูรณาการการทำงานร่วมกับหน่วยงานและภาคส่วนอื่น (๑ คะแนน)', cells:[
+   'มีการบูรณาการการทำงานร่วมกับหน่วยงานอื่นในการจัดหามาตรการด้านสาธารณสุข และกรณีของโรงพยาบาลมีการบูรณาการการทำงานระหว่างโรงพยาบาลในการส่งต่อผู้ป่วย โดยเฉพาะในพื้นที่ห่างไกล',
+   'มีการบูรณาการการทำงานร่วมกับหน่วยงานและภาคส่วนอื่นในการจัดหาสาธารณูปโภค และการป้องกันเหตุที่อาจส่งผลกระทบต่อประชาชน',
+   'มีการบูรณาการการทำงานร่วมกับภาคส่วนอื่น เพื่อส่งเสริมการใช้ทรัพยากรและขับเคลื่อนเศรษฐกิจในทุกระดับ',
+   'มีการบูรณาการการทำงานร่วมกับภาคส่วนอื่น เพื่อยกระดับคุณภาพชีวิตประชาชนให้มีภูมิคุ้มกันทางสังคม',
+   'มีการบูรณาการการทำงานที่ตอบสนองความต้องการของผู้รับบริการ รวมทั้งตอบสนองนโยบายที่สำคัญของประเทศ'] },
+ { title:'๓. การติดต่อหน่วยงาน และการตรวจสอบข้อมูลของผู้รับบริการด้วยตนเอง (๑ คะแนน)', cells:[
+   'หน่วยงานมีช่องทางการติดต่อฉุกเฉินที่ติดต่อได้ตลอด ๒๔ ชม. และมีการตอบสนองต่อเหตุอย่างรวดเร็ว รวมทั้งมีช่องทางที่ให้ประชาชนสามารถตรวจสอบข้อมูล/ประวัติการรักษาพยาบาลของตนเองได้โดยง่าย',
+   'หน่วยงานมีช่องทางการติดต่อฉุกเฉินที่ติดต่อได้ตลอด ๒๔ ชม. และมีการตอบสนองต่อเหตุอย่างรวดเร็ว รวมทั้งมีช่องทางที่ให้ประชาชนสามารถตรวจสอบข้อมูลของตนเองได้โดยง่าย',
+   'หน่วยงานมีช่องทางการติดต่อและการเข้าถึงที่ง่ายไม่ซับซ้อน เพื่อให้ประชาชนสามารถใช้บริการได้ทันที รวมทั้งมีช่องทางที่ให้ประชาชนสามารถตรวจสอบข้อมูลของตนเองได้โดยง่าย',
+   'หน่วยงานมีช่องทางการติดต่อและการเข้าถึงที่ง่ายไม่ซับซ้อน เพื่อให้ประชาชนสามารถใช้บริการได้ทันที รวมทั้งมีช่องทางที่ให้ประชาชนสามารถตรวจสอบข้อมูลของตนเองได้โดยง่าย',
+   'หน่วยงานมีช่องทางการติดต่อและการเข้าถึงที่ง่ายไม่ซับซ้อน เพื่อให้ประชาชนสามารถใช้บริการได้ทันที รวมทั้งมีช่องทางที่ให้ประชาชนสามารถตรวจสอบข้อมูลของตนเองได้โดยง่าย'] },
+ { title:'๔. องค์ความรู้ของบุคลากรและการสื่อสารมีความชัดเจน (ยกตัวอย่างสถานการณ์ที่เกิดขึ้น) (๑ คะแนน)', cells:[
+   'บุคลากรมีองค์ความรู้ที่สามารถให้คำปรึกษาแนะนำ และมีความเข้าอกเข้าใจผู้ป่วย เพื่อให้บริการด้วยความเต็มใจ',
+   'บุคลากรมีองค์ความรู้ที่สามารถให้คำปรึกษาแนะนำ และมีข้อมูลของผู้รับบริการ แบบรายพื้นที่/รายบุคคล เพื่อให้ความต้องการได้ตรงกับสภาพของปัญหา',
+   'บุคลากรมีองค์ความรู้ที่ครอบคลุมที่สามารถให้คำปรึกษาแนะนำในการแก้ไขปัญหาด้านเศรษฐกิจ',
+   'บุคลากรมีองค์ความรู้ด้านกฎหมายและกระบวนการยุติธรรมที่สามารถให้คำปรึกษาและแก้ไขปัญหาของผู้รับบริการ',
+   'บุคลากรมีองค์ความรู้และการสื่อสารเกี่ยวกับภารกิจของหน่วยงานแก่ผู้รับบริการได้อย่างชัดเจน'] },
+ { title:'๕. การพัฒนาระบบดิจิทัลในงานบริการที่สำคัญของหน่วยงาน (๑ คะแนน)', note:'หน่วยงานจะต้องดำเนินการให้ครบถ้วน', subs:[
+   ['มีระบบจองคิวล่วงหน้า','telemedicine/การให้คำปรึกษาผ่านช่องทางออนไลน์','มีช่องทางการสื่อสารทางอิเล็กทรอนิกส์อย่างน้อย ๒ ช่องทาง','มีระบบการชำระเงินผ่าน e-payment'],
+   ['มีระบบแจ้งเตือนและติดตามสถานะการให้บริการ','มีระบบยื่นคำขอ','มีระบบส่งเอกสารทางอิเล็กทรอนิกส์','มีระบบการชำระเงินผ่าน e-payment','มีระบบเชื่อมโยงและแลกเปลี่ยนข้อมูล'],
+   ['มีระบบตรวจสอบสิทธิ์','มีระบบยื่นคำขอ','มีระบบส่งเอกสารทางอิเล็กทรอนิกส์','มีระบบการชำระเงินผ่าน e-payment (ในกรณีที่มีการชำระเงิน)','มีระบบเชื่อมโยงและแลกเปลี่ยนข้อมูล'],
+   ['มีระบบตรวจสอบสิทธิ์','มีระบบแจ้งเตือนและติดตามสถานะให้บริการ','มีระบบยื่นคำขอ','มีระบบส่งเอกสารทางอิเล็กทรอนิกส์','มีระบบเชื่อมโยงและแลกเปลี่ยนข้อมูล'],
+   ['มีระบบตรวจสอบข้อมูล','มีระบบยื่นคำขอ','มีระบบส่งเอกสารทางอิเล็กทรอนิกส์','มีระบบการชำระเงินผ่าน e-payment (ในกรณีที่มีการชำระเงิน)','มีระบบเชื่อมโยงและแลกเปลี่ยนข้อมูล']] }
+];
 const RP_C2 = [
  ['1.1',0,'☺ ขั้นสูง',2],['1.2',0,'☺ ขั้นสูง',2],['1.3',0,'☺ ขั้นสูง',2],
  ['2.1',1,'♦ พื้นฐาน',1],['2.2',1,'♦ พื้นฐาน',1],['2.3',1,'♦ พื้นฐาน',1],['2.4',1,'☺ ขั้นสูง',2],['2.5',1,'☺ ขั้นสูง',2],['2.6',1,'☺ ขั้นสูง',2],['2.7',1,'☺ ขั้นสูง',2],['2.8',1,'♦ พื้นฐาน',1],['2.9',1,'♦ พื้นฐาน',1],['2.10',1,'☺ ขั้นสูง',2],['2.11',1,'☺ ขั้นสูง',2],['2.12',1,'♦ พื้นฐาน',1],['2.13',1,'☺ ขั้นสูง',2],['2.14',1,'☺ ขั้นสูง',2],['2.15',1,'☺ ขั้นสูง',2],['2.16',1,'☺ ขั้นสูง',2],['2.17',1,'♦ พื้นฐาน',1],['2.18',1,'☺ ขั้นสูง',2],
  ['3.1',2,'♦ พื้นฐาน',1],['3.2',2,'☺ ขั้นสูง',2],['3.3',2,'☺ ขั้นสูง',2],['3.4',2,'☺ ขั้นสูง',2],['3.5',2,'☺ ขั้นสูง',2],
  ['4.1',3,'☺ ขั้นสูง',2],['4.2',3,'☺ ขั้นสูง',2],['4.3',3,'☺ ขั้นสูง',2],['4.4',3,'☺ ขั้นสูง',2],['4.5',3,'☺ ขั้นสูง',2],
- ['5.1',4,'เพิ่มเติม',2],['5.2',4,'เพิ่มเติม',2],['5.3',4,'เพิ่มเติม',3],['5.4',4,'เพิ่มเติม',2],['5.5',4,'เพิ่มเติม',2]
+ ['5.1',4,'เพิ่มเติม',2],['5.2',4,'เพิ่มเติม',2],['5.3',4,'เพิ่มเติม',3],['5.4',4,'เพิ่มเติม',2],['5.5',4,'เพิ่มเติม',2],
+ ['5.6',5,'เพิ่มเติม',1],['5.7',5,'เพิ่มเติม',1],['5.8',5,'เพิ่มเติม',1],['5.9',5,'เพิ่มเติม',1],['5.10',5,'เพิ่มเติม',1]
 ];
 // Used only when the audit page has not stored its checklist structure yet
 function rpFallbackSchema(){
   const c1 = []; for(let i = 1; i <= 15; i++) c1.push({ no:String(i), text:'', group:'', badge:'', points:0 });
   return [
     { id:1, name:'เกณฑ์ที่ ๑ ด้านกายภาพ', meta:'', items:c1 },
-    { id:2, name:'เกณฑ์ที่ ๒ ด้านคุณภาพ', meta:'', items:RP_C2.map(r => ({ no:r[0], text:'', group:RP_G[r[1]], badge:r[2], points:r[3] })) },
+    { id:2, name:'เกณฑ์ที่ ๒ ด้านคุณภาพ', meta:'', agency:{ idx:1, name:RP_AG_NAMES[1] }, items:RP_C2.map(r => ({ no:r[0], text:'', group:RP_G[r[1]], badge:r[2], points:r[3] })) },
     { id:3, name:'เกณฑ์ที่ ๓ ด้านผลลัพธ์', meta:'', items:['1','2','3'].map(n => ({ no:n, text:'', group:'', badge:'10 คะแนน', points:10 })) }
   ];
 }
@@ -496,12 +549,12 @@ function rpLoadAudit(){
   try{ state = JSON.parse(localStorage.getItem(RP_LS_AUDIT) || '{}'); }catch(e){}
   if(!schema || !schema.length) schema = rpFallbackSchema();
   return schema.map(c => ({
-    id:c.id, name:c.name, meta:c.meta,
+    id:c.id, name:c.name, meta:c.meta, agency:c.agency || null,
     items:c.items.map(it => {
       const st = state[c.id + '_' + it.no] || {};
       return Object.assign({}, it, {
         checked:!!st.checked, note:st.note || '', driveLink:rpNormUrl(st.driveLink),
-        images:st.images || [], evidenceTime:st.evidenceTime || ''
+        images:st.images || [], evidenceTime:st.evidenceTime || '', subChecks:st.subChecks || {}
       });
     })
   }));
@@ -575,7 +628,7 @@ function rpWrap(inner, no, station){
     '<div class="rp-foot"><span>' + RP_FOOT + '</span><span class="pn">' + thNum(no) + '</span></div></div>';
 }
 
-function rpCoverInner(sc, station, dateIso){
+function rpCoverInner(sc, station, dateIso, agency){
   const gate = sc.gate1 ? '<span class="cv-pass">ผ่าน</span>' : '<span class="cv-fail">ยังไม่ผ่าน</span>';
   const basicTxt = sc.gateBasic ? '<span class="cv-pass">ครบ</span>' : '<span class="cv-fail">ยังไม่ครบ</span>';
   return '<div class="cv-box">' +
@@ -587,6 +640,7 @@ function rpCoverInner(sc, station, dateIso){
     '<div class="cv-info">' +
       '<div class="row"><b>ชื่อศูนย์ราชการสะดวก</b> <span class="ln">' + rpEsc(station) + '</span></div>' +
       '<div class="row"><b>วัน เดือน ปี ที่ตรวจประเมิน</b> <span class="ln">' + rpDateThai(dateIso) + '</span></div>' +
+      '<div class="row ag"><b>ลักษณะการให้บริการของหน่วยงาน</b> <span class="ln">' + rpEsc(agency || 'ด้านสาธารณูปโภค') + '</span></div>' +
       '<h3>สรุปผลการประเมินตนเองตามเงื่อนไขการรับรองมาตรฐาน</h3>' +
       '<div class="res b">๑. เกณฑ์ด้านกายภาพ แบบประเมินตนเอง (Self Checklist) มีทั้งหมด ๑๕ ข้อ</div>' +
       '<div class="res ind">ดำเนินการแล้ว ' + thNum(sc.c1Done) + ' จาก ๑๕ ข้อ — ' + gate + '</div>' +
@@ -626,7 +680,7 @@ function rpLevelInner(sc, station){
       '<tr><td>เกณฑ์ที่ ๓ ด้านผลลัพธ์</td><td class="v">' + thNum(sc.score3) + ' / ๓๐ คะแนน</td></tr>' +
       '<tr><td><b>รวมคะแนน</b></td><td class="v">' + thNum(sc.total) + ' / ๑๐๐ คะแนน</td></tr>' +
       '<tr><td><b>ผลการประเมิน</b></td><td class="v" style="white-space:normal;">' + rpEsc(sc.levelText) + '</td></tr>' +
-    '</table><div class="lv-note">หมายเหตุ: คะแนนด้านคุณภาพคำนวณเทียบสัดส่วนจากรายการที่ติ๊กดำเนินการในหน้าตรวจประเมินเต็ม ๗๐ คะแนน ส่วนด้านผลลัพธ์เต็ม ๓๐ คะแนน เป็นผลการประเมินตนเองเบื้องต้น ไม่ใช่ผลการตรวจประเมินอย่างเป็นทางการ</div></div>';
+    '</table><div class="lv-note">หมายเหตุ: คะแนนด้านคุณภาพ (เต็ม ๗๐ คะแนน) และด้านผลลัพธ์ (เต็ม ๓๐ คะแนน) คำนวณจากรายการที่ติ๊กดำเนินการในหน้าตรวจประเมิน เป็นผลการประเมินตนเองเบื้องต้น ไม่ใช่ผลการตรวจประเมินอย่างเป็นทางการ</div></div>';
 }
 
 function rpBlocks(crits, opts, meta, station, dateIso){
@@ -652,6 +706,7 @@ function rpBlocks(crits, opts, meta, station, dateIso){
     const rows = [];
     let last = null;
     c2.items.forEach(it => {
+      if(RP_AG_ITEMS.indexOf(it.no) > -1) return;
       if(it.group !== last){
         last = it.group;
         let g = rpEsc(it.group);
@@ -676,6 +731,30 @@ function rpBlocks(crits, opts, meta, station, dateIso){
       colgroup:'<col style="width:54px"><col><col style="width:262px">',
       thead:'<tr><th colspan="2">การดำเนินงาน</th><th>ผลการประเมินตนเองและหลักฐานประกอบ</th></tr>',
       rows:rows });
+    const agItems = RP_AG_ITEMS.map(n => c2.items.find(i => i.no === n)).filter(Boolean);
+    if(agItems.length){
+      const sel = (c2.agency && typeof c2.agency.idx === 'number') ? c2.agency.idx : 1;
+      blocks.push({ type:'table', cls:'ag-table', pre:'',
+        colgroup:'<col style="width:112px">' + '<col style="width:113px">'.repeat(5),
+        thead:'<tr><th colspan="6" class="agh1">๕. เงื่อนไขพิเศษเพิ่มเติม (๕ คะแนน) แสดงหลักฐานเชิงประจักษ์ทุกข้อที่มีการดำเนินการ //</th></tr>' +
+              '<tr><th rowspan="2" class="agh2">ประเด็น</th><th colspan="5" class="agh2">การจำแนกหน่วยงานตามลักษณะการให้บริการ*</th></tr>' +
+              '<tr>' + RP_AG_NAMES.map((n, i) => '<th class="agh3' + (i === sel ? ' agsel' : '') + '">' + n + (i === sel ? '<span class="agmark">✔ ลักษณะหน่วยงานนี้</span>' : '') + '</th>').join('') + '</tr>',
+        rows:agItems.map((it, k) => {
+          const def = RP_AG_ROWS[k];
+          const sc = it.subChecks || {};
+          const first = '<td class="agt"><b>' + def.title + '</b>' + (def.note ? '<div class="agn">' + def.note + '</div>' : '') +
+            '<div class="agres">' + rpCb(!!it.checked) + '<span>' + (it.checked ? 'ได้ ๑ คะแนน' : 'ยังไม่ได้ (เต็ม ๑ คะแนน)') + '</span></div></td>';
+          const cells = RP_AG_NAMES.map((n, i) => {
+            const on = i === sel;
+            const body = def.subs
+              ? def.subs[i].map(s => '<div class="agc">' + rpCb(on && !!sc[s]) + '<span>' + rpEsc(s) + '</span></div>').join('')
+              : '<div class="agc">' + rpCb(on && !!it.checked) + '<span>' + rpEsc(def.cells[i]) + '</span></div>';
+            return '<td class="' + (on ? 'agsel' : 'agmut') + '">' + body + '</td>';
+          }).join('');
+          const ev = rpEvidence(it, opts, meta);
+          return { keepNext:false, html:'<tr>' + first + cells + '</tr>' + (ev ? '<tr><td colspan="6" class="agev">' + ev + '</td></tr>' : '') };
+        }) });
+    }
   }
   if(opts.c3){
     const c3 = crits.find(c => c.id === 3);
@@ -789,7 +868,8 @@ async function rpBuildAll(){
   const opts = rpOptions(), station = rpStationName(), dateIso = rpDateIso();
   const sc = rpScores(crits);
   const body = rpPaginate(rpBlocks(crits, opts, meta, station, dateIso));
-  const inners = [rpCoverInner(sc, station, dateIso), rpLevelInner(sc, station)].concat(body);
+  const agName = (crits.find(c => c.id === 2).agency || {}).name;
+  const inners = [rpCoverInner(sc, station, dateIso, agName), rpLevelInner(sc, station)].concat(body);
   const pages = inners.map((h, i) => rpWrap(h, i + 1, station));
   return { pages, sc, crits };
 }
@@ -894,7 +974,7 @@ function rpRefreshUI(){
     '<div class="as-r"><span>รูปภาพ / รายละเอียด / ลิงก์ Drive</span><b>' + sc.imgCount + ' / ' + sc.noteCount + ' / ' + sc.linkCount + '</b></div>' +
     '<div class="as-r"><span>คะแนนรวมโดยประมาณ</span><b>' + sc.total + ' / 100</b></div>' +
     '<div class="as-r"><span>ผลการประเมิน</span><b style="text-align:right;max-width:170px;">' + rpEsc(sc.levelText.split(' (')[0]) + '</b></div>' + list;
-  pv1.innerHTML = rpWrap(rpCoverInner(sc, station, dateIso), 1, station);
+  pv1.innerHTML = rpWrap(rpCoverInner(sc, station, dateIso, (crits.find(c => c.id === 2).agency || {}).name), 1, station);
   pv2.innerHTML = rpWrap(rpLevelInner(sc, station), 2, station);
 }
 
