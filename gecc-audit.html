@@ -289,6 +289,16 @@
   .sub-cap{ font-size:11.5px; color:var(--text-dim); margin-bottom:5px; font-weight:600; }
   .sub-item{ display:flex; align-items:flex-start; gap:8px; font-size:12.5px; padding:2px 0; cursor:pointer; }
   .sub-item input{ margin-top:3px; accent-color:var(--good); }
+  .file-drop.is-full{ opacity:.6; cursor:not-allowed; }
+  .up-rules{ margin-top:8px; padding:9px 12px; border:1px solid var(--border); border-radius:10px; background:var(--surface); font-size:11.5px; color:var(--text-dim); }
+  .up-rules-h{ font-weight:700; color:var(--text-strong); margin-bottom:4px; font-size:12px; }
+  .up-rules ul{ margin:0; padding-left:16px; line-height:1.65; }
+  .up-rules b{ color:var(--text-strong); }
+  .up-bar{ height:5px; background:var(--divider); border-radius:10px; overflow:hidden; margin-top:7px; }
+  .up-bar-fill{ height:100%; background:var(--good); border-radius:10px; }
+  .up-bar-fill.mid{ background:var(--amber); }
+  .up-bar-fill.hi{ background:var(--signal); }
+  .up-notice{ margin-top:8px; padding:8px 12px; border-radius:10px; background:rgba(239,68,68,0.1); border:1px solid rgba(239,68,68,0.35); color:var(--signal); font-size:12px; line-height:1.6; }
 </style>
 </head>
 <body>
@@ -498,6 +508,32 @@ let openPanel = null;
 
 function evKey(critId, no){ return critId + '_' + no; }
 
+// ===== Upload limits =====
+const UP_MAX_IMAGES = 5;                 // images per checklist item
+const UP_MAX_FILE_MB = 10;               // original file size per image
+const UP_MAX_SIDE = 800;                 // longest side after automatic resize (px)
+const UP_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+const UP_QUOTA_CHARS = 5000000;          // approx. browser localStorage quota shared by every page of this site
+const UP_AVG_IMG_CHARS = 110000;         // approx. stored size of one resized photo
+let uploadNotice = {};
+
+function lsUsedChars(){
+  let n = 0;
+  try{
+    for(let i = 0; i < localStorage.length; i++){
+      const k = localStorage.key(i);
+      n += k.length + (localStorage.getItem(k) || '').length;
+    }
+  }catch(e){}
+  return n;
+}
+function storageInfo(){
+  const used = lsUsedChars();
+  const pct = Math.min(100, Math.round(used / UP_QUOTA_CHARS * 100));
+  const left = Math.max(0, Math.floor((UP_QUOTA_CHARS * 0.95 - used) / UP_AVG_IMG_CHARS));
+  return { used, pct, left, mb:(used / 1000000).toFixed(1) };
+}
+
 // ===== Persistence: checked state, notes, Drive links and photo evidence (data URLs) =====
 const LS_AUDIT = 'gecc-audit-state';
 const LS_STATION_NAME = 'gecc-audit-station-name';
@@ -558,7 +594,7 @@ function downscaleImageToDataURL(file, maxSide){
         canvas.width = Math.round(img.width * scale);
         canvas.height = Math.round(img.height * scale);
         canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
-        resolve(canvas.toDataURL('image/jpeg', 0.72));
+        resolve(canvas.toDataURL('image/jpeg', 0.7));
       };
       img.src = reader.result;
     };
@@ -649,6 +685,7 @@ function toggleItem(critId, no){
 function toggleEvidencePanel(critId, no){
   const key = evKey(critId, no);
   openPanel = (openPanel === key) ? null : key;
+  uploadNotice = {};
   renderBody();
 }
 
@@ -669,17 +706,26 @@ function hasEvidenceOf(item){
 
 async function handleImageUpload(event, critId, no){
   const item = findItem(critId, no);
+  const key = evKey(critId, no);
   if(!item.images) item.images = [];
   const files = Array.from(event.target.files || []);
   event.target.value = '';
+  const msgs = [];
+  let used = lsUsedChars();
   let added = false;
   for(const file of files){
+    if(item.images.length >= UP_MAX_IMAGES){ msgs.push('แนบได้สูงสุด ' + UP_MAX_IMAGES + ' รูปต่อข้อ — ข้ามไฟล์ที่เกิน'); break; }
+    if(UP_TYPES.indexOf(file.type) === -1){ msgs.push('“' + file.name + '” ไม่รองรับ (รับเฉพาะ JPG, PNG, WebP, GIF)'); continue; }
+    if(file.size > UP_MAX_FILE_MB * 1024 * 1024){ msgs.push('“' + file.name + '” ใหญ่เกิน ' + UP_MAX_FILE_MB + ' MB (' + (file.size / 1048576).toFixed(1) + ' MB)'); continue; }
     try{
-      const url = await downscaleImageToDataURL(file, 900);
+      const url = await downscaleImageToDataURL(file, UP_MAX_SIDE);
+      if(used + url.length > UP_QUOTA_CHARS * 0.97){ msgs.push('พื้นที่จัดเก็บในเบราว์เซอร์เต็ม — แนบ “' + file.name + '” ไม่ได้ (ลบรูปเดิมหรือใช้ลิงก์ Google Drive แทน)'); continue; }
       item.images.push({ name: file.name, url: url });
+      used += url.length;
       added = true;
-    }catch(e){}
+    }catch(e){ msgs.push('“' + file.name + '” เปิดอ่านไม่ได้ (ไฟล์เสียหรือเบราว์เซอร์ไม่รองรับรูปแบบนี้)'); }
   }
+  uploadNotice[key] = msgs;
   if(added && !item.checked){
     item.checked = true;
     item.autoChecked = true;
@@ -688,7 +734,10 @@ async function handleImageUpload(event, critId, no){
   renderTabs();
   renderBody();
   updateProgress();
-  if(!saveAuditState()) alert('พื้นที่จัดเก็บในเบราว์เซอร์เต็ม รูปอาจไม่ถูกบันทึกถาวร');
+  if(!saveAuditState()){
+    uploadNotice[key] = (uploadNotice[key] || []).concat(['บันทึกลงเบราว์เซอร์ไม่สำเร็จ (พื้นที่เต็ม) รูปอาจหายเมื่อรีเฟรช']);
+    renderBody();
+  }
 }
 
 function removeImage(critId, no, idx){
@@ -768,11 +817,22 @@ function renderBody(){
         <div class="evidence-panel" id="ev-panel-${key}">
           <div class="ev-row">
             <label>📷 รูปภาพหลักฐาน (เลือกได้หลายรูป)</label>
-            <label class="file-drop ${images.length ? 'has-file' : ''}">
+            <label class="file-drop ${images.length ? 'has-file' : ''} ${images.length >= UP_MAX_IMAGES ? 'is-full' : ''}">
               <span class="fd-icon">${images.length ? '✓' : '📷'}</span>
-              <span>${images.length ? 'แนบรูปแล้ว ' + images.length + ' รูป (กดเพื่อเพิ่มรูป)' : 'กดเพื่อเลือกรูปภาพจากเครื่อง'}</span>
-              <input type="file" accept="image/*" multiple onchange="handleImageUpload(event, ${crit.id}, '${it.no}')">
+              <span>${images.length >= UP_MAX_IMAGES ? 'ครบ ' + UP_MAX_IMAGES + ' รูปแล้ว — ลบรูปเดิมก่อนจึงจะเพิ่มได้' : (images.length ? 'แนบรูปแล้ว ' + images.length + ' รูป (กดเพื่อเพิ่มได้อีก ' + (UP_MAX_IMAGES - images.length) + ' รูป)' : 'กดเพื่อเลือกรูปภาพจากเครื่อง')}</span>
+              <input type="file" accept="image/jpeg,image/png,image/webp,image/gif" multiple ${images.length >= UP_MAX_IMAGES ? 'disabled' : ''} onchange="handleImageUpload(event, ${crit.id}, '${it.no}')">
             </label>
+            ${(uploadNotice[key] && uploadNotice[key].length) ? '<div class="up-notice">' + uploadNotice[key].map(m => '⚠ ' + m).join('<br>') + '</div>' : ''}
+            ${(() => { const si = storageInfo(); return `<div class="up-rules">
+              <div class="up-rules-h">ไฟล์ที่รองรับ</div>
+              <ul>
+                <li><b>ชนิดไฟล์:</b> รูปภาพ JPG / JPEG, PNG, WebP, GIF เท่านั้น (เอกสาร PDF/Word และวิดีโอ ให้แนบเป็นลิงก์ Google Drive ด้านล่าง)</li>
+                <li><b>ขนาดไฟล์:</b> ไม่เกิน ${UP_MAX_FILE_MB} MB ต่อรูป — ระบบย่อรูปอัตโนมัติให้ด้านยาวไม่เกิน ${UP_MAX_SIDE} px</li>
+                <li><b>จำนวน:</b> สูงสุด ${UP_MAX_IMAGES} รูปต่อข้อ (เลือกหลายรูปพร้อมกันได้) — ข้อนี้แนบแล้ว ${images.length}/${UP_MAX_IMAGES} รูป</li>
+                <li><b>พื้นที่จัดเก็บในเบราว์เซอร์:</b> ใช้ไป ${si.mb} / ~5 MB (${si.pct}%) — แนบเพิ่มได้อีกประมาณ ${si.left} รูปทั้งระบบ</li>
+              </ul>
+              <div class="up-bar"><div class="up-bar-fill ${si.pct >= 85 ? 'hi' : (si.pct >= 60 ? 'mid' : '')}" style="width:${si.pct}%"></div></div>
+            </div>`; })()}
             <div class="ev-thumbs" id="ev-thumbs-${key}">${renderThumbs(crit.id, it.no)}</div>
           </div>
           <div class="ev-row">
