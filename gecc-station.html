@@ -662,5 +662,531 @@ document.addEventListener('keydown', function(e){
   }
 });
 </script>
+<!--GECC_CHAT_START-->
+<script>
+/* ===================== GECC chat (Messenger-style) ===================== */
+(function(){
+'use strict';
+if(window.__geccChat) return;
+window.__geccChat = true;
+
+var LS_KEY = 'gecc-chat-v1';
+var UI_KEY = 'gecc-chat-ui';
+var MAX_WINS = 3;
+
+/* ---------- Stations that can be chatted with (add more rows here) ---------- */
+var STATIONS = [
+  { code:'BKK-004', name:'สถานีกรุงเทพ (หัวลำโพง)', short:'กรุงเทพ', abbr:['กท.','กทม.','หัวลำโพง','bangkok','hua lamphong'] },
+  { code:'AYA-011', name:'สถานีอยุธยา', short:'อยุธยา', abbr:['อย.','พระนครศรีอยุธยา','ayutthaya'] },
+  { code:'PLK-018', name:'สถานีพิษณุโลก', short:'พิษณุโลก', abbr:['พล.','phitsanulok'] },
+  { code:'NMA-022', name:'สถานีนครราชสีมา', short:'นครราชสีมา', abbr:['นม.','โคราช','korat','nakhon ratchasima'] },
+  { code:'UBN-030', name:'สถานีอุบลราชธานี', short:'อุบลราชธานี', abbr:['อบ.','อุบล','ubon','ubon ratchathani'] },
+  { code:'PBI-014', name:'สถานีเพชรบุรี', short:'เพชรบุรี', abbr:['พบ.','phetchaburi'] },
+  { code:'SRT-027', name:'สถานีสุราษฎร์ธานี', short:'สุราษฎร์ธานี', abbr:['สฎ.','สุราษฎร์','surat thani'] },
+  { code:'HDY-033', name:'สถานีหาดใหญ่', short:'หาดใหญ่', abbr:['สข.','hat yai','hatyai'] }
+];
+var byCode = {};
+STATIONS.forEach(function(s){ byCode[s.code] = s; });
+
+/* ---------- Identity (same source as the rest of the site) ---------- */
+var role = 'officer', myStation = 'BKK-004';
+try{
+  role = localStorage.getItem('gecc-role') === 'staff' ? 'staff' : 'officer';
+  myStation = (localStorage.getItem('gecc-station-code') || 'BKK-004').toUpperCase();
+}catch(e){}
+var side = role;                       // 'staff' | 'officer'
+var readKey = side === 'staff' ? 'readStaff' : 'readOfficer';
+var otherReadKey = side === 'staff' ? 'readOfficer' : 'readStaff';
+
+/* ---------- Helpers ---------- */
+function esc(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){ return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]; }); }
+function readJSON(st, key, fb){ try{ var v = JSON.parse(st.getItem(key)); return v == null ? fb : v; }catch(e){ return fb; } }
+function norm(s){ return String(s || '').toLowerCase().replace(/[\s\.\-_()]/g, ''); }
+function pad(n){ return n < 10 ? '0' + n : '' + n; }
+var MON = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
+function hhmm(ts){ var d = new Date(ts); return pad(d.getHours()) + ':' + pad(d.getMinutes()); }
+function dayStart(ts){ var d = new Date(ts); d.setHours(0,0,0,0); return d.getTime(); }
+function fmtSep(ts){
+  var diff = Math.round((dayStart(Date.now()) - dayStart(ts)) / 86400000);
+  if(diff <= 0) return hhmm(ts);
+  if(diff === 1) return 'เมื่อวาน ' + hhmm(ts);
+  var d = new Date(ts);
+  return d.getDate() + ' ' + MON[d.getMonth()] + ' ' + hhmm(ts);
+}
+function fmtRel(ts){
+  var m = Math.floor((Date.now() - ts) / 60000);
+  if(m < 1) return 'เมื่อสักครู่';
+  if(m < 60) return m + ' นาที';
+  var h = Math.floor(m / 60);
+  if(h < 24 && dayStart(ts) === dayStart(Date.now())) return h + ' ชม.';
+  var diff = Math.round((dayStart(Date.now()) - dayStart(ts)) / 86400000);
+  if(diff === 1) return 'เมื่อวาน';
+  var d = new Date(ts);
+  return d.getDate() + ' ' + MON[d.getMonth()];
+}
+function linkify(t){
+  return esc(t).replace(/(https?:\/\/[^\s<]+)/g, function(u){ return '<a href="' + u + '" target="_blank" rel="noopener">' + u + '</a>'; }).replace(/\n/g, '<br>');
+}
+var PALETTE = ['#0084ff','#a033ff','#ff5ca1','#00a400','#f7b928','#ff7a00','#00b2b2','#8a3b3b'];
+function colorOf(code){ var h = 0; for(var i = 0; i < code.length; i++) h = (h * 31 + code.charCodeAt(i)) >>> 0; return PALETTE[h % PALETTE.length]; }
+function avatarHtml(code, cls){
+  if(code === 'OFFICER') return '<div class="gc-av ' + (cls || '') + '" style="background:linear-gradient(135deg,#111327,#2E3358)"><span style="font-size:.78em">GC</span></div>';
+  var st = byCode[code];
+  var ch = st ? Array.from(st.short)[0] : '?';
+  return '<div class="gc-av ' + (cls || '') + '" style="background:' + colorOf(code) + '">' + esc(ch) + '</div>';
+}
+
+/* ---------- Store ---------- */
+function seed(){
+  var now = Date.now(), m = 60000, h = 3600000;
+  var id = 0;
+  function msg(from, name, text, ago){ id++; return { id:'s' + id, from:from, name:name, text:text, ts:now - ago }; }
+  return { v:1, threads:{
+    'NMA-022': { readStaff:now - 4 * h, readOfficer:0, messages:[
+      msg('staff','สถานีนครราชสีมา','สวัสดีครับ ขอสอบถามการแนบหลักฐานข้อ ๒.๔ คู่มือการปฏิบัติงาน ต้องแนบเป็นไฟล์ PDF ได้ไหมครับ', 35 * m),
+      msg('staff','สถานีนครราชสีมา','หรือแนบเป็นลิงก์ Google Drive ได้เลยครับ', 33 * m) ] },
+    'HDY-033': { readStaff:0, readOfficer:0, messages:[
+      msg('staff','สถานีหาดใหญ่','ห้องน้ำชายที่สถานีหาดใหญ่ซ่อมเสร็จแล้ว ขออัปเดตสถานะข้อร้องเรียนครับ', 3 * h) ] },
+    'UBN-030': { readStaff:now - 20 * h, readOfficer:now - 20 * h, messages:[
+      msg('officer','เจ้าหน้าที่ GECC','กรุณาส่งหลักฐานข้อ ๑.๓ ภายในวันศุกร์นี้นะครับ', 26 * h),
+      msg('staff','สถานีอุบลราชธานี','รับทราบครับ จะส่งให้ภายในวันพฤหัสบดี', 25 * h) ] },
+    'BKK-004': { readStaff:0, readOfficer:now - 9 * m, messages:[
+      msg('officer','เจ้าหน้าที่ GECC','ยินดีต้อนรับสู่ช่องแชท GECC ครับ หากมีข้อสงสัยเรื่องการประเมินตนเอง พิมพ์ถามเจ้าหน้าที่ได้ที่นี่', 10 * m) ] }
+  } };
+}
+function loadStore(){
+  var s = readJSON(localStorage, LS_KEY, null);
+  if(!s || !s.threads){ s = seed(); try{ localStorage.setItem(LS_KEY, JSON.stringify(s)); }catch(e){} }
+  return s;
+}
+var store = loadStore();
+var lastRaw = '';
+try{ lastRaw = localStorage.getItem(LS_KEY) || ''; }catch(e){}
+function saveStore(){
+  try{ lastRaw = JSON.stringify(store); localStorage.setItem(LS_KEY, lastRaw); }catch(e){}
+}
+function thread(code){
+  if(!store.threads[code]) store.threads[code] = { messages:[], readStaff:0, readOfficer:0 };
+  return store.threads[code];
+}
+function isIncoming(m){ return side === 'staff' ? (m.from === 'officer' || m.from === 'system') : m.from === 'staff'; }
+function unreadOf(code){
+  var t = store.threads[code]; if(!t) return 0;
+  var r = t[readKey] || 0;
+  return t.messages.filter(function(m){ return m.ts > r && isIncoming(m); }).length;
+}
+function visibleCodes(){
+  if(side === 'staff') return [myStation];
+  return Object.keys(store.threads).filter(function(c){ return store.threads[c].messages.length; }).sort(function(a, b){ return lastTs(b) - lastTs(a); });
+}
+function lastTs(code){ var t = store.threads[code]; return t && t.messages.length ? t.messages[t.messages.length - 1].ts : 0; }
+function totalUnread(){ return visibleCodes().reduce(function(s, c){ return s + unreadOf(c); }, 0); }
+function titleOf(code){
+  if(side === 'staff') return 'เจ้าหน้าที่ GECC';
+  return byCode[code] ? byCode[code].name : code;
+}
+function subOf(code){
+  if(side === 'staff') return 'ศูนย์ตรวจประเมินส่วนกลาง · ตอบกลับในเวลาทำการ';
+  return code + ' · นายสถานี';
+}
+function avCode(code){ return side === 'staff' ? 'OFFICER' : code; }
+
+function pushMessage(code, from, text){
+  store = loadStore();
+  var t = thread(code);
+  var last = t.messages.length ? t.messages[t.messages.length - 1].ts : 0;
+  var ts = Math.max(Date.now(), last + 1);
+  t.messages.push({ id:'m' + ts + Math.floor(Math.random() * 1000), from:from,
+    name: from === 'staff' ? (byCode[code] ? byCode[code].name : code) : (from === 'officer' ? 'เจ้าหน้าที่ GECC' : 'ระบบ GECC'),
+    text:text, ts:ts });
+  if(from === side) t[readKey] = ts;
+  saveStore();
+}
+
+/* ---------- UI state ---------- */
+var ui = readJSON(sessionStorage, UI_KEY, { wins:[], list:false });
+var query = '';
+function saveUI(){ try{ sessionStorage.setItem(UI_KEY, JSON.stringify(ui)); }catch(e){} }
+ui.wins = (ui.wins || []).filter(function(w){ return side === 'officer' || w.code === myStation; });
+
+/* ---------- CSS ---------- */
+var css = '' +
+'#gc-root{ position:fixed; right:0; bottom:0; z-index:450; font-family:var(--font-th,"Noto Sans Thai","Sarabun",sans-serif); color:#050505; --gc-bg:#fff; --gc-text:#050505; --gc-sub:#65676b; --gc-hover:#f0f2f5; --gc-line:#dadde1; --gc-recv:#e4e6eb; --gc-input:#f0f2f5; }' +
+'html[data-theme="dark"] #gc-root{ --gc-bg:#242526; --gc-text:#e4e6eb; --gc-sub:#b0b3b8; --gc-hover:#3a3b3c; --gc-line:#3e4042; --gc-recv:#3a3b3c; --gc-input:#3a3b3c; color:#e4e6eb; }' +
+'#gc-root *{ box-sizing:border-box; }' +
+'.gc-launcher{ position:fixed; right:18px; bottom:18px; width:56px; height:56px; border-radius:50%; border:none; cursor:pointer; background:linear-gradient(135deg,#0084ff,#a033ff); box-shadow:0 6px 18px rgba(0,0,0,.35); display:flex; align-items:center; justify-content:center; transition:transform .15s ease, background .2s ease; }' +
+'.gc-launcher:hover{ transform:scale(1.06); }' +
+'.gc-launcher svg{ width:28px; height:28px; fill:#fff; }' +
+'.gc-launcher.gc-alert{ background:#e41e3f; animation:gc-pulse 1.6s ease-out infinite; }' +
+'@keyframes gc-pulse{ 0%{ box-shadow:0 0 0 0 rgba(228,30,63,.6), 0 6px 18px rgba(0,0,0,.35); } 70%{ box-shadow:0 0 0 16px rgba(228,30,63,0), 0 6px 18px rgba(0,0,0,.35); } 100%{ box-shadow:0 0 0 0 rgba(228,30,63,0), 0 6px 18px rgba(0,0,0,.35); } }' +
+'.gc-badge{ position:absolute; top:-4px; right:-4px; min-width:22px; height:22px; padding:0 6px; border-radius:11px; background:#fff; color:#e41e3f; font-size:12px; font-weight:700; display:none; align-items:center; justify-content:center; border:2px solid #e41e3f; }' +
+'.gc-launcher.gc-alert .gc-badge{ display:flex; }' +
+
+'.gc-list{ position:fixed; right:18px; bottom:84px; width:344px; max-height:min(580px, calc(100vh - 110px)); background:var(--gc-bg); color:var(--gc-text); border-radius:10px; box-shadow:0 12px 28px rgba(0,0,0,.28), 0 2px 4px rgba(0,0,0,.2); display:none; flex-direction:column; overflow:hidden; }' +
+'.gc-list.open{ display:flex; }' +
+'.gc-lhead{ display:flex; align-items:center; gap:6px; padding:14px 14px 6px; }' +
+'.gc-ltitle{ font-size:22px; font-weight:700; flex:1; }' +
+'.gc-ibtn{ width:32px; height:32px; border-radius:50%; border:none; background:var(--gc-hover); color:var(--gc-text); cursor:pointer; font-size:15px; display:flex; align-items:center; justify-content:center; flex:none; }' +
+'.gc-ibtn:hover{ filter:brightness(.93); }' +
+'.gc-lsub{ padding:0 14px 8px; font-size:12px; color:var(--gc-sub); }' +
+'.gc-search{ margin:2px 12px 8px; background:var(--gc-input); border-radius:20px; display:flex; align-items:center; gap:8px; padding:0 12px; }' +
+'.gc-search input{ flex:1; border:none; outline:none; background:transparent; color:var(--gc-text); font-family:inherit; font-size:14px; padding:9px 0; min-width:0; }' +
+'.gc-lbody{ overflow-y:auto; padding:0 8px 10px; flex:1; }' +
+'.gc-sec{ font-size:12px; font-weight:600; color:var(--gc-sub); padding:8px 8px 4px; }' +
+'.gc-row{ display:flex; align-items:center; gap:10px; padding:8px; border-radius:8px; cursor:pointer; }' +
+'.gc-row:hover{ background:var(--gc-hover); }' +
+'.gc-rmain{ flex:1; min-width:0; }' +
+'.gc-rname{ font-size:14.5px; font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }' +
+'.gc-rprev{ font-size:12.5px; color:var(--gc-sub); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }' +
+'.gc-row.unread .gc-rname, .gc-row.unread .gc-rprev{ font-weight:700; color:var(--gc-text); }' +
+'.gc-dot{ min-width:20px; height:20px; padding:0 6px; border-radius:10px; background:#e41e3f; color:#fff; font-size:11.5px; font-weight:700; display:flex; align-items:center; justify-content:center; flex:none; }' +
+'.gc-empty{ text-align:center; color:var(--gc-sub); font-size:13px; padding:26px 16px; line-height:1.7; }' +
+'.gc-menu{ position:absolute; right:48px; top:46px; background:var(--gc-bg); border-radius:8px; box-shadow:0 8px 24px rgba(0,0,0,.3); padding:6px; display:none; z-index:5; }' +
+'.gc-menu.open{ display:block; }' +
+'.gc-menu button{ display:block; width:100%; text-align:left; border:none; background:none; color:var(--gc-text); font-family:inherit; font-size:13px; padding:8px 12px; border-radius:6px; cursor:pointer; white-space:nowrap; }' +
+'.gc-menu button:hover{ background:var(--gc-hover); }' +
+
+'.gc-av{ width:40px; height:40px; border-radius:50%; color:#fff; font-weight:700; font-size:17px; display:flex; align-items:center; justify-content:center; flex:none; }' +
+'.gc-av.sm{ width:32px; height:32px; font-size:14px; }' +
+'.gc-av.xs{ width:28px; height:28px; font-size:12px; }' +
+
+'.gc-wins{ position:fixed; right:86px; bottom:0; display:flex; flex-direction:row-reverse; align-items:flex-end; gap:12px; pointer-events:none; }' +
+'#gc-root.list-open .gc-wins{ right:374px; }' +
+'.gc-win{ pointer-events:auto; width:328px; height:440px; background:var(--gc-bg); color:var(--gc-text); border-radius:10px 10px 0 0; box-shadow:0 12px 28px rgba(0,0,0,.28), 0 2px 4px rgba(0,0,0,.2); display:flex; flex-direction:column; overflow:hidden; }' +
+'.gc-win.min{ height:48px; }' +
+'.gc-whead{ display:flex; align-items:center; gap:8px; padding:6px 8px 6px 10px; height:48px; flex:none; box-shadow:0 1px 2px rgba(0,0,0,.15); cursor:pointer; }' +
+'.gc-wname{ flex:1; min-width:0; line-height:1.2; }' +
+'.gc-wname b{ display:block; font-size:14.5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }' +
+'.gc-wname small{ display:block; font-size:11.5px; color:var(--gc-sub); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }' +
+'.gc-whdot{ width:12px; height:12px; border-radius:50%; background:#e41e3f; flex:none; display:none; }' +
+'.gc-win.min.has-unread .gc-whdot{ display:block; }' +
+'.gc-wbtn{ width:28px; height:28px; border:none; background:none; border-radius:50%; cursor:pointer; color:#0084ff; font-size:15px; display:flex; align-items:center; justify-content:center; flex:none; }' +
+'.gc-wbtn:hover{ background:var(--gc-hover); }' +
+'.gc-wbody{ flex:1; overflow-y:auto; padding:10px 8px 4px; }' +
+'.gc-win.min .gc-wbody, .gc-win.min .gc-wfoot{ display:none; }' +
+'.gc-sepl{ text-align:center; font-size:11.5px; color:var(--gc-sub); margin:10px 0 6px; }' +
+'.gc-m{ display:flex; align-items:flex-end; gap:6px; margin:1px 0; }' +
+'.gc-m.mine{ justify-content:flex-end; }' +
+'.gc-m .gc-spacer{ width:28px; flex:none; }' +
+'.gc-b{ max-width:75%; padding:7px 12px; border-radius:18px; font-size:14px; line-height:1.4; word-wrap:break-word; overflow-wrap:anywhere; background:var(--gc-recv); color:var(--gc-text); }' +
+'.gc-b a{ color:inherit; text-decoration:underline; }' +
+'.gc-m.mine .gc-b{ background:#0084ff; color:#fff; }' +
+'.gc-m.mine.g-first .gc-b{ border-bottom-right-radius:4px; } .gc-m.mine.g-mid .gc-b{ border-top-right-radius:4px; border-bottom-right-radius:4px; } .gc-m.mine.g-last .gc-b{ border-top-right-radius:4px; }' +
+'.gc-m.recv.g-first .gc-b{ border-bottom-left-radius:4px; } .gc-m.recv.g-mid .gc-b{ border-top-left-radius:4px; border-bottom-left-radius:4px; } .gc-m.recv.g-last .gc-b{ border-top-left-radius:4px; }' +
+'.gc-b .gc-who{ display:block; font-size:11px; opacity:.75; margin-bottom:1px; }' +
+'.gc-note{ text-align:center; font-size:11.5px; color:var(--gc-sub); margin:6px 20px; font-style:italic; }' +
+'.gc-rcpt{ text-align:right; font-size:11px; color:var(--gc-sub); padding:2px 6px 0; }' +
+'.gc-wfoot{ display:flex; align-items:flex-end; gap:6px; padding:8px; flex:none; position:relative; }' +
+'.gc-ta{ flex:1; background:var(--gc-input); border-radius:18px; padding:8px 12px; border:none; outline:none; resize:none; font-family:inherit; font-size:14px; color:var(--gc-text); max-height:96px; line-height:1.35; }' +
+'.gc-fbtn{ width:32px; height:32px; border:none; background:none; border-radius:50%; cursor:pointer; color:#0084ff; font-size:19px; display:flex; align-items:center; justify-content:center; flex:none; }' +
+'.gc-fbtn:hover{ background:var(--gc-hover); }' +
+'.gc-fbtn svg{ width:22px; height:22px; fill:#0084ff; }' +
+'.gc-emoji{ position:absolute; left:8px; bottom:52px; background:var(--gc-bg); border-radius:10px; box-shadow:0 8px 22px rgba(0,0,0,.3); padding:6px; display:none; grid-template-columns:repeat(6,1fr); gap:2px; z-index:3; }' +
+'.gc-emoji.open{ display:grid; }' +
+'.gc-emoji button{ border:none; background:none; font-size:20px; cursor:pointer; border-radius:6px; padding:3px; }' +
+'.gc-emoji button:hover{ background:var(--gc-hover); }' +
+'@media (max-width:700px){ .gc-list{ right:8px; left:8px; width:auto; } .gc-wins{ right:8px; left:8px; } #gc-root.list-open .gc-wins{ right:8px; } .gc-win{ width:100%; } .gc-win ~ .gc-win{ display:none; } }';
+
+var styleEl = document.createElement('style');
+styleEl.id = 'gc-style';
+styleEl.textContent = css;
+document.head.appendChild(styleEl);
+
+/* ---------- DOM ---------- */
+var root = document.createElement('div');
+root.id = 'gc-root';
+root.innerHTML =
+  '<div class="gc-wins" id="gc-wins"></div>' +
+  '<div class="gc-list" id="gc-list">' +
+    '<div class="gc-menu" id="gc-menu"><button data-act="reset">↺ ล้างข้อความทั้งหมด / กลับเป็นข้อความตัวอย่าง</button></div>' +
+    '<div class="gc-lhead"><div class="gc-ltitle">แชท</div><button class="gc-ibtn" data-act="menu" title="ตัวเลือก">⋯</button><button class="gc-ibtn" data-act="closeList" title="ปิด">✕</button></div>' +
+    '<div class="gc-lsub" id="gc-lsub"></div>' +
+    '<div class="gc-search" id="gc-search"><span>🔍</span><input id="gc-q" type="text" placeholder="ค้นหาสถานี (ชื่อ / รหัส / ชื่อย่อ)" autocomplete="off"></div>' +
+    '<div class="gc-lbody" id="gc-lbody"></div>' +
+  '</div>' +
+  '<button class="gc-launcher" id="gc-launcher" title="แชท" aria-label="แชท">' +
+    '<svg viewBox="0 0 28 28"><path d="M14 2.2C7.4 2.2 2.2 7.2 2.2 13.5c0 3.4 1.5 6.4 3.9 8.4v4.1l3.7-2c1.3.4 2.7.6 4.2.6 6.6 0 11.8-5 11.8-11.1S20.6 2.2 14 2.2zm1.2 14.9l-3-3.2-5.8 3.2 6.4-6.8 3.1 3.2 5.7-3.2-6.4 6.8z"/></svg>' +
+    '<span class="gc-badge" id="gc-badge">0</span>' +
+  '</button>';
+document.body.appendChild(root);
+
+var elList = document.getElementById('gc-list'), elLBody = document.getElementById('gc-lbody'),
+    elLauncher = document.getElementById('gc-launcher'), elBadge = document.getElementById('gc-badge'),
+    elWins = document.getElementById('gc-wins'), elQ = document.getElementById('gc-q'),
+    elSearch = document.getElementById('gc-search'), elLSub = document.getElementById('gc-lsub'),
+    elMenu = document.getElementById('gc-menu');
+
+if(side === 'staff'){
+  elSearch.style.display = 'none';
+  elLSub.textContent = 'สนทนากับเจ้าหน้าที่ GECC ได้เท่านั้น';
+}else{
+  elLSub.textContent = 'ค้นหาและสนทนากับนายสถานีได้ทุกสถานี';
+}
+var baseTitle = document.title;
+
+/* ---------- Rendering ---------- */
+function renderLauncher(){
+  var n = totalUnread();
+  elLauncher.classList.toggle('gc-alert', n > 0);
+  elBadge.textContent = n > 9 ? '9+' : String(n);
+  document.title = n > 0 ? '(' + n + ') ' + baseTitle : baseTitle;
+}
+
+function previewOf(code){
+  var t = store.threads[code];
+  if(!t || !t.messages.length) return 'เริ่มการสนทนาใหม่';
+  var m = t.messages[t.messages.length - 1];
+  var pre = m.from === side ? 'คุณ: ' : (m.from === 'system' ? 'ระบบ: ' : '');
+  return pre + m.text.replace(/\s+/g, ' ') + ' · ' + fmtRel(m.ts);
+}
+function rowHtml(code){
+  var u = unreadOf(code);
+  return '<div class="gc-row' + (u ? ' unread' : '') + '" data-act="open" data-code="' + code + '">' +
+    avatarHtml(avCode(code)) +
+    '<div class="gc-rmain"><div class="gc-rname">' + esc(titleOf(code)) + '</div><div class="gc-rprev">' + esc(previewOf(code)) + '</div></div>' +
+    (u ? '<span class="gc-dot">' + u + '</span>' : '') + '</div>';
+}
+function renderListBody(){
+  var html = '';
+  if(side === 'staff'){
+    html = rowHtml(myStation);
+  }else{
+    var q = norm(query);
+    if(q){
+      var found = STATIONS.filter(function(s){ return [s.code, s.name, s.short].concat(s.abbr || []).some(function(x){ return norm(x).indexOf(q) > -1; }); });
+      html = '<div class="gc-sec">ผลการค้นหา</div>' + (found.length ? found.map(function(s){
+        var u = unreadOf(s.code);
+        return '<div class="gc-row' + (u ? ' unread' : '') + '" data-act="open" data-code="' + s.code + '">' + avatarHtml(s.code) +
+          '<div class="gc-rmain"><div class="gc-rname">' + esc(s.name) + '</div><div class="gc-rprev">' + esc(s.code + (s.abbr && s.abbr[0] ? ' · ' + s.abbr[0] : '') + ' · ' + (store.threads[s.code] && store.threads[s.code].messages.length ? previewOf(s.code) : 'เริ่มการสนทนาใหม่')) + '</div></div>' +
+          (u ? '<span class="gc-dot">' + u + '</span>' : '') + '</div>';
+      }).join('') : '<div class="gc-empty">ไม่พบสถานีที่ตรงกับ “' + esc(query) + '”<br>ลองพิมพ์ชื่อสถานี รหัสสถานี หรือชื่อย่อ</div>');
+    }else{
+      var codes = visibleCodes();
+      html = codes.length ? '<div class="gc-sec">การสนทนาล่าสุด</div>' + codes.map(rowHtml).join('') :
+        '<div class="gc-empty">ยังไม่มีการสนทนา<br>พิมพ์ชื่อสถานี รหัส หรือชื่อย่อในช่องค้นหาเพื่อเริ่มแชท</div>';
+    }
+  }
+  elLBody.innerHTML = html;
+}
+
+function groupClass(msgs, i){
+  var m = msgs[i], prev = msgs[i - 1], next = msgs[i + 1];
+  var sameP = prev && prev.from === m.from && m.ts - prev.ts < 15 * 60000 && m.from !== 'system';
+  var sameN = next && next.from === m.from && next.ts - m.ts < 15 * 60000 && m.from !== 'system';
+  return sameP && sameN ? 'g-mid' : (sameP ? 'g-last' : (sameN ? 'g-first' : 'g-solo'));
+}
+function messagesHtml(code){
+  var t = store.threads[code];
+  var msgs = t ? t.messages : [];
+  if(!msgs.length) return '<div class="gc-empty">ยังไม่มีข้อความ<br>พิมพ์ข้อความด้านล่างเพื่อเริ่มสนทนา</div>';
+  var other = (t && t[otherReadKey]) || 0;
+  var lastMine = -1;
+  msgs.forEach(function(m, i){ if(m.from === side) lastMine = i; });
+  var out = '';
+  msgs.forEach(function(m, i){
+    var prev = msgs[i - 1], next = msgs[i + 1];
+    if(!prev || m.ts - prev.ts > 15 * 60000) out += '<div class="gc-sepl">' + fmtSep(m.ts) + '</div>';
+    if(m.from === 'system' && side === 'officer'){
+      out += '<div class="gc-note">ระบบตอบกลับอัตโนมัติถึงสถานี: ' + esc(m.text) + '</div>';
+      return;
+    }
+    var mine = m.from === side, g = groupClass(msgs, i);
+    var endOfGroup = g === 'g-last' || g === 'g-solo';
+    var who = (!mine && (g === 'g-first' || g === 'g-solo') && m.from === 'system') ? '<span class="gc-who">🤖 ตอบกลับอัตโนมัติ</span>' : '';
+    out += '<div class="gc-m ' + (mine ? 'mine' : 'recv') + ' ' + g + '">' +
+      (!mine ? (endOfGroup ? avatarHtml(m.from === 'system' ? 'OFFICER' : (side === 'officer' ? code : 'OFFICER'), 'xs') : '<div class="gc-spacer"></div>') : '') +
+      '<div class="gc-b">' + who + linkify(m.text) + '</div></div>';
+    if(mine && i === lastMine){
+      out += '<div class="gc-rcpt">' + (other >= m.ts ? 'อ่านแล้ว' : 'ส่งแล้ว') + '</div>';
+    }
+  });
+  return out;
+}
+
+function winEl(code){ return elWins.querySelector('.gc-win[data-code="' + code + '"]'); }
+function buildWin(w){
+  var d = document.createElement('div');
+  d.className = 'gc-win';
+  d.setAttribute('data-code', w.code);
+  d.innerHTML =
+    '<div class="gc-whead" data-act="toggleMin" data-code="' + w.code + '">' + avatarHtml(avCode(w.code), 'sm') +
+      '<div class="gc-wname"><b>' + esc(titleOf(w.code)) + '</b><small>' + esc(subOf(w.code)) + '</small></div>' +
+      '<span class="gc-whdot"></span>' +
+      '<button class="gc-wbtn" data-act="toggleMin" data-code="' + w.code + '" title="ย่อ">—</button>' +
+      '<button class="gc-wbtn" data-act="closeWin" data-code="' + w.code + '" title="ปิด">✕</button></div>' +
+    '<div class="gc-wbody"></div>' +
+    '<div class="gc-wfoot">' +
+      '<div class="gc-emoji">' + ['😀','😊','😂','😍','🙏','👍','👏','🎉','❤️','😢','😮','🚆'].map(function(e){ return '<button data-act="emoji" data-code="' + w.code + '" data-e="' + e + '">' + e + '</button>'; }).join('') + '</div>' +
+      '<button class="gc-fbtn" data-act="emojiToggle" data-code="' + w.code + '" title="อีโมจิ">😊</button>' +
+      '<textarea class="gc-ta" rows="1" placeholder="พิมพ์ข้อความ..." data-code="' + w.code + '"></textarea>' +
+      '<button class="gc-fbtn gc-sendbtn" data-act="send" data-code="' + w.code + '" title="ส่ง"><span class="gc-like">👍</span></button>' +
+    '</div>';
+  return d;
+}
+function updateWin(w, force){
+  var d = winEl(w.code); if(!d) return;
+  var t = store.threads[w.code];
+  var msgs = t ? t.messages : [];
+  var sig = msgs.length + ':' + (msgs.length ? msgs[msgs.length - 1].id : '') + ':' + ((t && t[otherReadKey]) || 0);
+  var body = d.querySelector('.gc-wbody');
+  d.classList.toggle('min', !!w.min);
+  d.classList.toggle('has-unread', unreadOf(w.code) > 0);
+  if(force || d.getAttribute('data-sig') !== sig){
+    var near = body.scrollHeight - body.scrollTop - body.clientHeight < 80;
+    var first = !d.getAttribute('data-sig');
+    body.innerHTML = messagesHtml(w.code);
+    d.setAttribute('data-sig', sig);
+    if(near || first || force) body.scrollTop = body.scrollHeight;
+  }
+}
+function renderWins(){
+  var codes = ui.wins.map(function(w){ return w.code; });
+  Array.prototype.slice.call(elWins.querySelectorAll('.gc-win')).forEach(function(d){
+    if(codes.indexOf(d.getAttribute('data-code')) === -1) elWins.removeChild(d);
+  });
+  ui.wins.forEach(function(w){
+    if(!winEl(w.code)) elWins.appendChild(buildWin(w));
+    updateWin(w, false);
+  });
+  // keep DOM order = ui order (newest first for row-reverse)
+  ui.wins.slice().forEach(function(w){ elWins.appendChild(winEl(w.code)); });
+  ui.wins.forEach(function(w){ if(!w.min && document.visibilityState !== 'hidden') markRead(w.code, true); });
+}
+function renderAll(){
+  root.classList.toggle('list-open', !!ui.list);
+  elList.classList.toggle('open', !!ui.list);
+  renderLauncher();
+  if(ui.list) renderListBody();
+  renderWins();
+}
+function markRead(code, silent){
+  var t = store.threads[code];
+  if(!t || !t.messages.length) return;
+  var last = t.messages[t.messages.length - 1].ts;
+  if((t[readKey] || 0) < last){
+    t[readKey] = last;
+    saveStore();
+    renderLauncher();
+    if(ui.list) renderListBody();
+    var w = ui.wins.filter(function(x){ return x.code === code; })[0];
+    if(w && !silent) updateWin(w, false);
+    var d = winEl(code); if(d) d.classList.remove('has-unread');
+  }
+}
+
+/* ---------- Actions ---------- */
+function openConversation(code){
+  if(side === 'staff' && code !== myStation) return;
+  var idx = -1;
+  ui.wins.forEach(function(w, i){ if(w.code === code) idx = i; });
+  var w = idx > -1 ? ui.wins.splice(idx, 1)[0] : { code:code, min:false };
+  w.min = false;
+  ui.wins.unshift(w);                    // index 0 = nearest the launcher
+  if(ui.wins.length > MAX_WINS) ui.wins.length = MAX_WINS;
+  ui.list = false;
+  saveUI();
+  renderAll();
+  markRead(code);
+  var d = winEl(code);
+  if(d){ var ta = d.querySelector('.gc-ta'); if(ta) ta.focus(); var b = d.querySelector('.gc-wbody'); b.scrollTop = b.scrollHeight; }
+}
+function sendMessage(code){
+  var d = winEl(code); if(!d) return;
+  var ta = d.querySelector('.gc-ta');
+  var text = ta.value.replace(/\s+$/, '');
+  if(!text) text = '👍';
+  if(side === 'staff' && code !== myStation) return;
+  pushMessage(code, side, text);
+  ta.value = ''; ta.style.height = 'auto';
+  syncSendIcon(d);
+  var w = ui.wins.filter(function(x){ return x.code === code; })[0];
+  if(w) updateWin(w, true);
+  renderLauncher();
+  if(ui.list) renderListBody();
+  if(side === 'staff'){
+    var t = store.threads[code];
+    var lastAck = 0;
+    t.messages.forEach(function(m){ if(m.from === 'system') lastAck = m.ts; });
+    if(Date.now() - lastAck > 10 * 60000){
+      setTimeout(function(){
+        pushMessage(code, 'system', 'ได้รับข้อความของท่านแล้ว เจ้าหน้าที่จะตอบกลับโดยเร็วที่สุด (ตอบกลับอัตโนมัติ)');
+        renderAll();
+      }, 1600);
+    }
+  }
+}
+function syncSendIcon(d){
+  var ta = d.querySelector('.gc-ta'), btn = d.querySelector('.gc-sendbtn');
+  var has = ta.value.trim().length > 0;
+  btn.innerHTML = has ? '<svg viewBox="0 0 24 24"><path d="M2 21l21-9L2 3v7l15 2-15 2z"/></svg>' : '<span class="gc-like">👍</span>';
+  btn.title = has ? 'ส่ง' : 'ส่งไลก์';
+}
+
+root.addEventListener('click', function(ev){
+  var t = ev.target.closest('[data-act]');
+  if(!t) { elMenu.classList.remove('open'); return; }
+  var act = t.getAttribute('data-act'), code = t.getAttribute('data-code');
+  if(act !== 'menu') elMenu.classList.remove('open');
+  if(act === 'open') openConversation(code);
+  else if(act === 'closeList'){ ui.list = false; saveUI(); renderAll(); }
+  else if(act === 'menu'){ elMenu.classList.toggle('open'); }
+  else if(act === 'reset'){
+    if(confirm('ล้างข้อความทั้งหมดและกลับเป็นข้อความตัวอย่าง?')){ store = seed(); saveStore(); ui.wins.forEach(function(w){ var d = winEl(w.code); if(d) d.removeAttribute('data-sig'); }); renderAll(); }
+  }
+  else if(act === 'toggleMin'){
+    if(ev.target.closest('.gc-wbtn') && t.classList.contains('gc-whead')) return;
+    var w = ui.wins.filter(function(x){ return x.code === code; })[0];
+    if(w){ w.min = !w.min; saveUI(); renderWins(); if(!w.min) markRead(code); }
+  }
+  else if(act === 'closeWin'){
+    ui.wins = ui.wins.filter(function(x){ return x.code !== code; }); saveUI(); renderAll();
+  }
+  else if(act === 'send') sendMessage(code);
+  else if(act === 'emojiToggle'){ var e = winEl(code).querySelector('.gc-emoji'); e.classList.toggle('open'); }
+  else if(act === 'emoji'){
+    var d = winEl(code), ta = d.querySelector('.gc-ta');
+    ta.value += t.getAttribute('data-e'); syncSendIcon(d); d.querySelector('.gc-emoji').classList.remove('open'); ta.focus();
+  }
+});
+root.addEventListener('keydown', function(ev){
+  var ta = ev.target.closest && ev.target.closest('.gc-ta');
+  if(ta && ev.key === 'Enter' && !ev.shiftKey && !ev.isComposing){ ev.preventDefault(); sendMessage(ta.getAttribute('data-code')); }
+});
+root.addEventListener('input', function(ev){
+  var ta = ev.target.closest && ev.target.closest('.gc-ta');
+  if(ta){ ta.style.height = 'auto'; ta.style.height = Math.min(96, ta.scrollHeight) + 'px'; syncSendIcon(ta.closest('.gc-win')); }
+  if(ev.target === elQ){ query = elQ.value; renderListBody(); }
+});
+root.addEventListener('focusin', function(ev){
+  var d = ev.target.closest && ev.target.closest('.gc-win');
+  if(d) markRead(d.getAttribute('data-code'));
+});
+elLauncher.addEventListener('click', function(){
+  ui.list = !ui.list; saveUI(); renderAll();
+  if(ui.list && side === 'officer'){ setTimeout(function(){ elQ.focus(); }, 30); }
+});
+document.addEventListener('click', function(ev){
+  if(ui.list && !root.contains(ev.target)){ ui.list = false; saveUI(); renderAll(); }
+});
+document.addEventListener('visibilitychange', function(){ if(document.visibilityState === 'visible') renderAll(); });
+
+/* ---------- Live sync (other tabs / windows of this browser) ---------- */
+window.addEventListener('storage', function(ev){
+  if(ev.key === LS_KEY){ store = loadStore(); try{ lastRaw = localStorage.getItem(LS_KEY) || ''; }catch(e){} renderAll(); }
+});
+setInterval(function(){
+  var raw = ''; try{ raw = localStorage.getItem(LS_KEY) || ''; }catch(e){}
+  if(raw && raw !== lastRaw){ lastRaw = raw; store = loadStore(); renderAll(); }
+  else renderLauncher();
+}, 2000);
+
+/* ---------- Public helpers (handy for testing / later server hookup) ---------- */
+window.geccChat = { open:openConversation, stations:STATIONS, send:function(code, from, text){ pushMessage(code, from, text); renderAll(); }, reset:function(){ store = seed(); saveStore(); renderAll(); } };
+
+renderAll();
+})();
+
+</script>
+<!--GECC_CHAT_END-->
 </body>
 </html>
