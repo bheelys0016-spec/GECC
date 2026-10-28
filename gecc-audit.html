@@ -55,6 +55,10 @@
   .page-head h1{ font-size:24px; margin:0 0 5px; }
   .page-head p{ margin:0; font-size:13px; color:var(--text-dim); }
   .station-select{ font-family:var(--font-mono); font-size:12px; color:var(--text-dim); }
+  .st-input{ font-family:var(--font-th); font-size:13px; padding:6px 12px; border:1px solid var(--input-border); border-radius:14px; background:var(--surface); color:var(--text-strong); width:310px; max-width:100%; }
+  .st-input:disabled{ opacity:.75; }
+  .sync-status{ display:block; font-family:var(--font-th); font-size:11.5px; margin-top:4px; color:var(--text-faint); min-height:15px; }
+  .sync-status.ok{ color:var(--good); } .sync-status.err{ color:var(--signal); }
   .station-select select{ font-family:var(--font-th); font-size:13px; padding:6px 10px; border:1px solid var(--input-border); border-radius:14px; background:var(--surface); }
 
   .layout{ display:grid; grid-template-columns:1fr 300px; gap:20px; align-items:start; }
@@ -334,7 +338,9 @@
     </div>
     <div class="station-select">
       กำลังประเมิน:
-      <select><option>BKK-004 · สถานีกรุงเทพ (หัวลำโพง)</option></select>
+      <input id="audit-station" class="st-input" list="audit-station-list" placeholder="พิมพ์ชื่อ / รหัส / ชื่อย่อสถานี" autocomplete="off" onchange="onStationPick(this.value)">
+      <datalist id="audit-station-list"></datalist>
+      <span class="sync-status" id="sync-status"></span>
     </div>
     <a class="to-report-btn" href="gecc-report.html">📄 สร้างรายงานจากข้อมูลนี้ →</a>
   </div>
@@ -528,6 +534,7 @@ function lsUsedChars(){
   return n;
 }
 function storageInfo(){
+  if(DBON()) return { central:true, used:0, pct:0, left:999, mb:'0.0' };
   const used = lsUsedChars();
   const pct = Math.min(100, Math.round(used / UP_QUOTA_CHARS * 100));
   const left = Math.max(0, Math.floor((UP_QUOTA_CHARS * 0.95 - used) / UP_AVG_IMG_CHARS));
@@ -536,9 +543,476 @@ function storageInfo(){
 
 // ===== Persistence: checked state, notes, Drive links and photo evidence (data URLs) =====
 const LS_AUDIT = 'gecc-audit-state';
-const LS_STATION_NAME = 'gecc-audit-station-name';
+const LEGACY_STATION = { 'BKK-004':'1001', 'AYA-011':'1031', 'PLK-018':'1118', 'NMA-022':'2114', 'UBN-030':'2290', 'PBI-014':'4101', 'SRT-027':'4239', 'HDY-033':'4347' };
+// stations from the SRT code book: [code, name, abbr TH, abbr EN]
+const ST_LIST = [
+["1001","กรุงเทพ","กท.","BKK"],
+["1004","สามเสน","สส.","SAM"],
+["1007","ชุมทางบางซื่อ","บซ.","BSJ"],
+["1000","สถานีกลางกรุงเทพอภิวัฒน์","กภ.","KTW"],
+["1011","บางเขน","บข.","BKH"],
+["1015","หลักสี่","ลส.","LKS"],
+["1017","ดอนเมือง","ดม.","DMU"],
+["1021","รังสิต","รต.","RSI"],
+["1022","เชียงราก","ชร.","CHR"],
+["1024","เชียงรากน้อย","ชน.","CRN"],
+["1026","คลองพุทรา","พซ.","KPS"],
+["1028","บางปะอิน","บอ.","BPI"],
+["1029","บ้านโพ","บพ.","BPH"],
+["1031","อยุธยา","อย.","AYY"],
+["1032","บ้านม้า","มา.","BAA"],
+["1033","มาบพระจันทร์","บจ.","MPC"],
+["1035","พระแก้ว","พก.","PHK"],
+["1036","ชุมทางบ้านภาชี","ภช.","BPJ"],
+["1037","หนองวิวัฒน์","วิ.","NGW"],
+["1039","ท่าเรือ","ทร.","THR"],
+["1041","บ้านหมอ","มอ.","BMO"],
+["1045","หนองโดน","โด.","NDO"],
+["1047","บ้านกลับ","บก.","BKP"],
+["1048","บ้านป่าหวาย","ปว.","BPW"],
+["1050","ลพบุรี","ลบ.","LBR"],
+["1051","ท่าแค","ทแ.","THK"],
+["1053","โคกกะเทียม","คท.","KKT"],
+["1055","หนองเต่า","นต.","NGT"],
+["1056","หนองทรายขาว","ซข.","NSK"],
+["1058","บ้านหมี่","บม.","BAM"],
+["1061","จันเสน","จส.","CHS"],
+["1063","ช่องแค","ชค.","CHK"],
+["1066","โพนทอง","โพ.","POT"],
+["1067","บ้านตาคลี","ตล.","BTK"],
+["1069","ดงมะกุ","ดง.","DMK"],
+["1070","หัวหวาย","หว.","HUW"],
+["1072","หนองโพ","นพ.","NGP"],
+["1074","หัวงิ้ว","หง.","HNG"],
+["1076","เนินมะกอก","มก.","NMA"],
+["1079","เขาทอง","ขท.","KTH"],
+["1082","นครสวรรค์","นว.","NKS"],
+["1083","ปากน้ำโพ","ปพ.","PNP"],
+["1226","บึงบอระเพ็ด","เพ.","BBP"],
+["1084","ทับกฤช","ทก.","TKT"],
+["1086","คลองปลากด","ปก.","KPK"],
+["1088","ชุมแสง","ชส.","CMS"],
+["1091","วังกร่าง","กา.","WAK"],
+["1093","บางมูลนาก","นา.","BMN"],
+["1095","หอไกร","ไก.","HOK"],
+["1097","ดงตะขบ","ดข.","DTK"],
+["1099","ตะพานหิน","ตห.","TPH"],
+["1101","ห้วยเกตุ","ยต.","HKE"],
+["1103","หัวดง","หด.","HUD"],
+["1105","วังกรด","วร.","WKT"],
+["1107","พิจิตร","พจ.","PIC"],
+["1109","ท่าฬ่อ","ทฬ.","THL"],
+["1111","บางกระทุ่ม","ทม.","BKT"],
+["1112","แม่เทียบ","แท.","MAT"],
+["1114","บ้านใหม่","บห.","BMA"],
+["1116","บึงพระ","บะ.","BUP"],
+["1118","พิษณุโลก","พล.","PSL"],
+["1119","บ้านเต็งหนาม","เห.","BTN"],
+["1121","บ้านตูม","ตม.","BTU"],
+["1122","แควน้อย","คน.","KWN"],
+["1125","พรหมพิราม","พห.","PPR"],
+["1127","หนองตม","หต.","NOO"],
+["1130","บ้านบุ่ง","บง.","BBU"],
+["1131","บ้านโคน","บค.","BKN"],
+["1134","พิชัย","พย.","PCH"],
+["1136","ไร่อ้อย","รอ.","ROI"],
+["1137","ชุมทางบ้านดารา","ดร.","BDJ"],
+["1144","ท่าสัก","าส.","THS"],
+["1146","ตรอน","ตอ.","TON"],
+["1148","วังกะพี้","วก.","WKP"],
+["1150","อุตรดิตถ์","อด.","UTD"],
+["1151","ศิลาอาสน์","ศล.","SLA"],
+["1154","บ้านด่าน","บด.","BDA"],
+["1157","ปางต้นผึ้ง","ปต.","PTP"],
+["1160","ห้วยไร่","หา.","HUR"],
+["1164","เด่นชัย","ดช.","DCH"],
+["1165","ปากปาน","ปา.","PPA"],
+["1167","แก่งหลวง","กล.","KAL"],
+["1172","บ้านปิน","บป.","BAP"],
+["1176","ผาคัน","ผน.","PKN"],
+["1180","ปางป๋วย","ปย.","PPU"],
+["1182","แม่จาง","มจ.","MCH"],
+["1184","แม่เมาะ","มม.","MAM"],
+["1187","ศาลาผาลาด","ผล.","SPL"],
+["1189","แม่ทะ","มท.","MTH"],
+["1192","หนองวัวเฒ่า","วถ.","NOW"],
+["1193","นครลำปาง","ลป.","NKL"],
+["1196","ห้างฉัตร","หฉ.","HGC"],
+["1198","ปางม่วง","ปม.","PAM"],
+["1201","แม่ตานน้อย","มต.","MTN"],
+["1204","ขุนตาน","ขน.","KHT"],
+["1206","ทาชมภู","าช.","TCP"],
+["1208","ศาลาแม่ทา","ลท.","SMT"],
+["1212","หนองหล่ม","งล.","NOL"],
+["1216","ลำพูน","ลพ.","LMP"],
+["1218","ป่าเส้า","ปส.","PSO"],
+["1220","สารภี","ภี.","SRP"],
+["1222","เชียงใหม่","ชม.","CGM"],
+["1139","คลองมะพลับ","มป.","KML"],
+["1143","สวรรคโลก","สว.","SWL"],
+["2001","หนองกวย","นก.","NKU"],
+["2002","หนองแซง","นซ.","NSE"],
+["2004","หนองสีดา","นด.","NOA"],
+["2005","บ้านป๊อกแป๊ก","ปป.","BPP"],
+["2007","สระบุรี","ะร.","SRR"],
+["2009","ชุมทางหนองบัว","นบ.","NBU"],
+["2011","ชุมทางแก่งคอย","กค.","KKJ"],
+["2082","มาบกะเบา","มบ.","MKB"],
+["2083","ผาเสด็จ","ผด.","PSD"],
+["2084","หินลับ","หล.","HIL"],
+["2086","มวกเหล็ก","มล.","MUL"],
+["2088","กลางดง","าง.","KDO"],
+["2089","ปางอโศก","โศ.","PAS"],
+["2091","บันไดม้า","ได.","BDM"],
+["2093","ปากช่อง","ปช.","PAC"],
+["2095","ซับม่วง","ซม.","SMU"],
+["2096","จันทึก","จท.","CNT"],
+["2097","คลองขนานจิตร","ขจ.","KKC"],
+["2100","คลองไผ่","คผ.","KPH"],
+["2101","ลาดบัวขาว","ลข.","LBK"],
+["2102","บ้านใหม่สำโรง","สำ.","BMS"],
+["2103","หนองน้ำขุ่น","นข.","NGK"],
+["2105","สีคิ้ว","สค.","SKI"],
+["2107","สูงเนิน","สน.","SNN"],
+["2109","กุดจิก","กจ.","KCK"],
+["2111","โคกกรวด","คก.","KKU"],
+["2113","ภูเขาลาด","ขล.","PKL"],
+["2114","นครราชสีมา","รส.","NRS"],
+["2115","ชุมทางถนนจิระ","จร.","TNJ"],
+["2211","บ้านพะเนา","พเ.","BPN"],
+["2213","ท่าช้าง","ชา.","TCH"],
+["2215","หนองมโนรมย์","มโ.","NOM"],
+["2217","จักราช","จช.","CKR"],
+["2220","บ้านหินโคน","หโ.","BHK"],
+["2222","หินดาษ","ดา.","HID"],
+["2224","ห้วยแถลง","ถล.","HTL"],
+["2227","หนองกระทิง","ทง.","NKT"],
+["2229","ลำปลายมาศ","ลำ.","LPM"],
+["2231","ทะเมนชัย","มช.","TMC"],
+["2233","บ้านแสลงพัน","งพ.","BSP"],
+["2234","บ้านหนองตาด","ตา.","BNT"],
+["2236","บุรีรัมย์","รย.","BRR"],
+["2239","ห้วยราช","หร.","HRA"],
+["2243","กระสัง","ะส.","KSG"],
+["2244","หนองเต็ง","เต.","NOE"],
+["2246","ลำชี","ลช.","LCH"],
+["2248","สุรินทร์","สร.","SUR"],
+["2250","บุฤาษี","บุ.","BRU"],
+["2252","เมืองที","อท.","MUT"],
+["2254","กะโดนค้อ","ดค.","KDK"],
+["2256","ศีขรภูมิ","รภ.","SKP"],
+["2258","บ้านกะลัน","ลน.","BKL"],
+["2261","สำโรงทาบ","สบ.","STP"],
+["2264","ห้วยทับทัน","ทท.","HTT"],
+["2267","อุทุมพรพิสัย","อุ.","UTP"],
+["2270","บ้านเนียม","บเ.","BNI"],
+["2273","ศรีสะเกษ","เก.","SSK"],
+["2277","หนองแวง","อว.","NNW"],
+["2279","บ้านคล้อ","าค.","BNK"],
+["2281","กันทรารมย์","าร.","KTR"],
+["2285","ห้วยขยุง","ขย.","HKY"],
+["2288","บุ่งหวาย","งห.","BWI"],
+["2290","อุบลราชธานี","อน.","UBR"],
+["2117","บ้านเกาะ","กะ.","BAK"],
+["2120","บ้านกระโดน","กโ.","BKD"],
+["2121","หนองแมว","นง.","NNM"],
+["2122","โนนสูง","นโ.","NSU"],
+["2124","บ้านดงพลอง","ดพ.","BDP"],
+["2126","บ้านมะค่า","มค.","BMK"],
+["2128","พลสงคราม","พค.","PSK"],
+["2129","บ้านดอนใหญ่","ดญ.","BDY"],
+["2131","เมืองคง","งค.","MUK"],
+["2133","โนนทองหลาง","นท.","NTL"],
+["2136","ชุมทางบัวใหญ่","วญ.","BYJ"],
+["2139","หนองบัวลาย","งบ.","NNB"],
+["2142","หนองมะเขือ","งอ.","NMK"],
+["2144","เมืองพล","อล.","MUP"],
+["2149","บ้านหัน","าห.","BHN"],
+["2152","บ้านไผ่","บผ.","PHI"],
+["2156","บ้านแฮด","ฮด.","BHT"],
+["2160","ท่าพระ","พะ.","TAP"],
+["2163","ขอนแก่น","ขอ.","KHK"],
+["2166","สำราญ","าญ.","SAR"],
+["2170","โนนพะยอม","พอ.","NPY"],
+["2172","น้ำพอง","อง.","NPO"],
+["2174","ห้วยเสียว","ยว.","HUS"],
+["2177","เขาสวนกวาง","สง.","KSK"],
+["2181","โนนสะอาด","โอ.","NSA"],
+["2183","ห้วยเกิ้ง","ยก.","HKG"],
+["2186","กุมภวาปี","วป.","KWP"],
+["2188","ห้วยสามพาด","หพ.","HSP"],
+["2190","หนองตะไก้","งต.","NNT"],
+["2194","หนองขอนกว้าง","ออ.","NKK"],
+["2195","อุดรธานี","รด.","UTN"],
+["2201","นาพู่","พู.","NPU"],
+["2207","นาทา","ยน.","NAA"],
+["2209","หนองคาย","นค.","NKI"],
+["2012","บ้านช่องใต้","ชต.","BCT"],
+["2017","หินซ้อน","หซ.","HIS"],
+["2020","แก่งเสือเต้น","แส.","KST"],
+["2024","โคกสลุง","คุ.","KSL"],
+["2026","สุรนารายณ์","ะน.","SNR"],
+["2033","ลำนารายณ์","ลา.","LNR"],
+["2038","แผ่นดินทอง","แง.","PDT"],
+["2042","โคกคลี","คี.","KKI"],
+["2045","ช่องสำราญ","อช.","CSR"],
+["2049","บ้านวะตะแบก (เทพสถิต)","แบ.","BWT"],
+["2052","ห้วยยายจิ๋ว","จย.","HYC"],
+["2057","บำเหน็จณรงค์","าจ.","BNN"],
+["2062","จัตุรัส","จต.","CTR"],
+["2066","หนองฉิม","ฉม.","NOC"],
+["2072","บ้านเหลื่อม","นเ.","BLM"],
+["2076","หนองพลวง","งว.","NNP"],
+["3001","มักกะสัน","มส.","MKS"],
+["3009","คลองตัน","คต.","KOT"],
+["3010","หัวหมาก","หม.","HUM"],
+["3012","บ้านทับช้าง","ทช.","BTC"],
+["3014","ลาดกระบัง","ะบ.","LKB"],
+["3015","หัวตะเข้","หข.","HTK"],
+["3017","คลองหลวงแพ่ง","คพ.","KLP"],
+["3019","คลองเปรง","คป.","PRE"],
+["3021","คลองบางพระ","คบ.","KBP"],
+["3023","ชุมทางฉะเชิงเทรา","ฉท.","CHJ"],
+["3055","บางน้ำเปรี้ยว","บย.","BGP"],
+["3057","ชุมทางคลองสิบเก้า","สเ.","KSI"],
+["3059","โยทะกา","ยท.","YTK"],
+["3061","บ้านสร้าง","สา.","BSA"],
+["3064","บ้านปากพลี","าป.","BPA"],
+["3066","ปราจีนบุรี","ปจ.","PCB"],
+["3068","โคกมะกอก","กอ.","KMK"],
+["3070","ประจันตคาม","จค.","PTK"],
+["3072","บ้านดงบัง","ดบ.","BDB"],
+["3075","กบินทร์บุรี","กบ.","KBB"],
+["3078","หนองสัง","อส.","NNS"],
+["3083","บ้านแก้ง","นแ.","BKE"],
+["3087","สระแก้ว","ะก.","SKA"],
+["3094","วัฒนานคร","วค.","WTN"],
+["3100","อรัญประเทศ","อร.","ARP"],
+["3130","ด่านพรมแดนบ้านคลองลึก","ลง.","BLK"],
+["3118","องครักษ์","อษ.","OKA"],
+["3120","วิหารแดง","วแ.","WHD"],
+["3121","บุใหญ่","ให.","BUY"],
+["3122","ชุมทางบ้านไผ่นาบุญ","บญ.","BPB"],
+["3026","ดอนสีนนท์","ดอ.","DSN"],
+["3029","พานทอง","งท.","PHT"],
+["3032","ชลบุรี","ชบ.","COB"],
+["3034","บางพระ","ระ.","PRA"],
+["3036","ชุมทางศรีราชา","ศช.","SRC"],
+["3039","บางละมุง","มุ.","BGL"],
+["3041","พัทยา","พา.","PTY"],
+["3043","บ้านห้วยขวาง","ยข.","BHW"],
+["3045","ชุมทางเขาชีจรรย์","ชจ.","KCC"],
+["3047","บ้านพลูตาหลวง","พต.","PTG"],
+["3048","อู่ตะเภา","อภ.","UTA"],
+["3049","จุกเสม็ด","จเ.","CAM"],
+["3110","บ้านฉาง","บฉ.","BNC"],
+["3115","มาบตาพุด","าพ.","MTP"],
+["3002","แม่น้ำ","มน.","MAN"],
+["4005","บางบำหรุ","บำ.","BGB"],
+["4004","ชุมทางตลิ่งชัน","ตช.","TCJ"],
+["4002","ธนบุรี","ธบ.","TBR"],
+["4008","ศาลาธรรมสพน์","ทพ.","STS"],
+["4009","ศาลายา","ลย.","SLY"],
+["4010","วัดสุวรรณ","สุ.","WSW"],
+["4012","วัดงิ้วราย","งร.","WRI"],
+["4013","นครชัยศรี","รช.","NCS"],
+["4014","ท่าแฉลบ","ฉล.","TCL"],
+["4015","ต้นสำโรง","โร.","TSR"],
+["4016","นครปฐม","คฐ.","NPT"],
+["4018","โพรงมะเดื่อ","พด.","PMD"],
+["4019","คลองบางตาล","บา.","KBT"],
+["4020","ชุมทางหนองปลาดุก","ปด.","NPJ"],
+["4079","บ้านโป่ง","โป.","BAG"],
+["4081","นครชุมน์","นช.","NCH"],
+["4082","คลองตาคด","ตค.","KTK"],
+["4083","โพธาราม","พร.","PTR"],
+["4085","เจ็ดเสมียน","จม.","CSM"],
+["4087","บ้านกล้วย","าก.","BKI"],
+["4089","ราชบุรี","รร.","RBR"],
+["4090","บ้านคูบัว","บบ.","BKB"],
+["4091","บ่อตะคร้อ","บร.","BOT"],
+["4093","ปากท่อ","ปท.","PTO"],
+["4095","บางเค็ม","งเ.","BGK"],
+["4097","เขาย้อย","เข.","KYO"],
+["4098","หนองปลาไหล","ปล.","NPL"],
+["4099","บางจาก","จก.","BGC"],
+["4101","เพชรบุรี","พบ.","PBR"],
+["4104","เขาทโมน","โม.","KTM"],
+["4105","หนองไม้เหลือง","นม.","NML"],
+["4107","หนองจอก","หจ.","NNC"],
+["4108","หนองศาลา","งา.","NOS"],
+["4111","ชะอำ","ชอ.","CHA"],
+["4114","ห้วยทรายเหนือ","ซน.","HSN"],
+["4115","ห้วยทรายใต้","ซใ.","HST"],
+["4118","หัวหิน","หห.","HHI"],
+["4119","หนองแก","นอ.","NKA"],
+["4120","สวนสนประดิพัทธ์","สป.","SSP"],
+["4121","เขาเต่า","ขต.","KTO"],
+["4123","วังก์พง","วพ.","WPO"],
+["4124","ปราณบุรี","ปน.","PAB"],
+["4126","หนองคาง","อค.","NKH"],
+["4128","สามร้อยยอด","สย.","SRY"],
+["4130","สามกระทาย","สท.","SKT"],
+["4133","กุยบุรี","กย.","KBR"],
+["4135","บ่อนอก","บน.","BON"],
+["4138","ทุ่งมะเม่า","มเ.","TMM"],
+["4140","คั่นกระได","กด.","KKD"],
+["4142","ประจวบคีรีขันธ์","จข.","PKK"],
+["4146","วังด้วน","วด.","WDN"],
+["4149","ห้วยยาง","หย.","HUY"],
+["4153","ทับสะแก","สก.","TSK"],
+["4158","บ้านกรูด","กร.","BUT"],
+["4161","นาผักขวง","ผข.","NPK"],
+["4163","บางสะพานใหญ่","พญ.","BSY"],
+["4165","ชะม่วง","ชว.","CMU"],
+["4167","บางสะพานน้อย","พน.","BSN"],
+["4169","ห้วยสัก","ยส.","HAS"],
+["4172","เขาไชยราช","ขช.","KCR"],
+["4175","มาบอำมฤต","มร.","MMR"],
+["4178","คลองวังช้าง","คช.","KWC"],
+["4179","ปะทิว","ะท.","PTI"],
+["4181","บ้านคอกม้า","คา.","BKM"],
+["4182","สะพลี","สี.","SPI"],
+["4184","นาชะอัง","ชง.","NCA"],
+["4186","ชุมพร","ชพ.","CUP"],
+["4187","แสงแดด","สด.","SDA"],
+["4189","ทุ่งคา","ทค.","TKA"],
+["4191","วิสัย","ไส.","WSI"],
+["4194","สวี","ะว.","SWI"],
+["4196","เขาสวนทุเรียน","ขร.","KSU"],
+["4199","ปากตะโก","ตก.","PAT"],
+["4201","ควนหินมุ้ย","มย.","KHM"],
+["4203","หลังสวน","งส.","LSU"],
+["4205","คลองขนาน","คข.","KKN"],
+["4208","ละแม","แม.","LMA"],
+["4210","บ้านดวด","ดว.","BDU"],
+["4212","คันธุลี","คล.","KTL"],
+["4213","ดอนธูป","ดธ.","DOT"],
+["4215","ท่าชนะ","นะ.","TCN"],
+["4218","เขาพนมแบก","ขบ.","KPN"],
+["4221","ไชยา","ชย.","CIY"],
+["4224","ท่าฉาง","ทฉ.","TAC"],
+["4226","คลองไทร","คไ.","KLS"],
+["4227","มะลวน","ลว.","MLU"],
+["4229","ชุมทางบ้านทุ่งโพธิ์","ทโ.","TPJ"],
+["4239","สุราษฎร์ธานี","รท.","SRN"],
+["4241","เขาหัวควาย","ขค.","KOH"],
+["4245","เขาพลู","ขพ.","KOP"],
+["4247","บ้านนา","นน.","BNA"],
+["4249","ห้วยมุด","มด.","HMU"],
+["4250","นาสาร","นส.","NSN"],
+["4253","พรุพี","พพ.","PUP"],
+["4255","บ้านส้อง","สอ.","BAS"],
+["4257","บ้านพรุกระแชง","แช.","BKC"],
+["4258","ห้วยปริก","หป.","HUP"],
+["4259","กระเบียด","เบ.","KBI"],
+["4261","ทานพอ","ทา.","TPO"],
+["4262","ฉวาง","ฉว.","CAW"],
+["4264","คลองจันดี","จด.","KCD"],
+["4266","หลักช้าง","หช.","LAC"],
+["4268","นาบอน","าอ.","NAB"],
+["4269","คลองจัง","คจ.","KOC"],
+["4270","ชุมทางทุ่งสง","ทส.","TSJ"],
+["4295","ใสใหญ่","สใ.","SYI"],
+["4297","ช่องเขา","ชข.","CKH"],
+["4299","ร่อนพิบูลย์","รบ.","ROP"],
+["4300","ชุมทางเขาชุมทอง","ชท.","KCJ"],
+["4310","ควนหนองคว้า","คว.","KNK"],
+["4312","บ้านตูล","ตน.","BAT"],
+["4315","ชะอวด","ชด.","CHU"],
+["4317","บ้านนางหลง","นล.","BNL"],
+["4318","บ้านขอนหาด","ขห.","BHH"],
+["4319","แหลมโตนด","โน.","LTN"],
+["4321","ปากคลอง","ปค.","PKH"],
+["4325","พัทลุง","พท.","PTL"],
+["4328","บ้านต้นโดน","บโ.","BTD"],
+["4330","เขาชัยสน","เช.","KCS"],
+["4331","บางแก้ว","แก.","BAE"],
+["4334","ควนเคี่ยม","คเ.","KUK"],
+["4336","หารเทา","หท.","HAT"],
+["4338","โคกทราย","โท.","KKS"],
+["4340","ควนเนียง","เน.","KNN"],
+["4342","บ้านเกาะใหญ่","กใ.","BYI"],
+["4344","บางกล่ำ","บล.","BGM"],
+["4345","บ้านดินลาน","ดล.","BDL"],
+["4347","ชุมทางหาดใหญ่","หใ.","HYJ"],
+["4377","นาม่วง","มง.","NMU"],
+["4381","วัดควนมีด","วม.","WKM"],
+["4384","จะนะ","จน.","CAN"],
+["4386","ท่าแมงลัก","งก.","TML"],
+["4388","เกาะสะบ้า","กส.","KSB"],
+["4391","เทพา","เท.","TPA"],
+["4393","ตาแปด","ตป.","TPE"],
+["4395","ปัตตานี","นี.","PTN"],
+["4397","นาประดู่","าด.","NPD"],
+["4437","วัดช้างให้","ชห.","WCH"],
+["4399","คลองทราย","คซ.","KOI"],
+["4400","ตาเซะ","ตซ.","TAS"],
+["4402","ยะลา","ยล.","YLA"],
+["4405","ไม้แก่น","ไม.","MIK"],
+["4408","รามัน","รั.","RMA"],
+["4409","บาลอ","าล.","BAL"],
+["4411","รือเสาะ","สะ.","RUS"],
+["4414","ลาโละ","ลล.","LLO"],
+["4416","มะรือโบ","โบ.","MRB"],
+["4419","ตันหยงมัส","ยม.","TYM"],
+["4421","ป่าไผ่","ปผ.","PAP"],
+["4423","เจาะไอร้อง","จอ.","CIR"],
+["4424","บูกิต","บู.","BUK"],
+["4427","โต๊ะเด็ง","ตด.","TOD"],
+["4428","สุไหงปาดี","งด.","SGP"],
+["4432","สุไหงโก-ลก","โล.","SGK"],
+["4368","คลองแงะ","คง.","KNG"],
+["4373","ปาดังเบซาร์ (ไทย)","ปซ.๒","PBT"],
+["4374","ปาดังเบซาร์","ปซ.","PBS"],
+["4042","สุพรรณบุรี","สพ.","SPB"],
+["4044","สระโกสินารายณ์","สโ.","SKS"],
+["4045","ลูกแก","ลแ.","LUK"],
+["4048","ท่าเรือน้อย","ทน.","TRN"],
+["4051","ท่าม่วง","าม.","TMG"],
+["4057","กาญจนบุรี","กญ.","KCB"],
+["4063","วังเย็น","วย.","WYN"],
+["4069","ท่ากิเลน","กน.","TKL"],
+["4073","วังโพ","วง.","WAP"],
+["4077","น้ำตก","าต.","NAT"],
+["4238","คีรีรัฐนิคม","รค.","KRR"],
+["4272","ที่วัง","ทว.","TWG"],
+["4281","ห้วยยอด","ยอ.","HYO"],
+["4289","ตรัง","ตร.","TRG"],
+["4294","กันตัง","กต.","KAT"],
+["4302","บ้านทุ่งหล่อ","ลอ.","BLO"],
+["4303","โคกคราม","คค.","KKA"],
+["4308","นครศรีธรรมราช","ธำ.","NST"],
+["5001","วงเวียนใหญ่","งญ.","WWY"],
+["5003","ตลาดพลู","ลู.","TLP"],
+["5008","วัดสิงห์","สิ.","WTS"],
+["5012","รางโพธิ์","รโ.","RPO"],
+["5018","มหาชัย","ชั.","MHC"],
+["5019","บ้านแหลม","แห.","BLA"],
+["5032","แม่กลอง","แอ.","MKO"]
+];
+let auditStation = '1001';
+const DBON = () => !!(window.GeccDB && window.GeccDB.enabled);
+function lsKey(code){ return LS_AUDIT + ':' + code; }
+function normSt(s){ return String(s || '').toLowerCase().replace(/[\s\.\-_()·]/g, ''); }
+function stRow(code){ return ST_LIST.find(r => r[0] === code); }
+function stLabel(r){ return r[0] + ' · ' + r[1] + ' · ' + r[2] + ' · ' + r[3]; }
+function roleIsStaff(){ try{ return localStorage.getItem('gecc-role') === 'staff'; }catch(e){ return false; } }
+function ownStationCode(){
+  if(DBON() && window.GeccDB.me && window.GeccDB.me.station) return window.GeccDB.me.station;
+  let c = 'BKK-004';
+  try{ c = (localStorage.getItem('gecc-station-code') || 'BKK-004').toUpperCase(); }catch(e){}
+  return LEGACY_STATION[c] || c;
+}
 
-function saveAuditState(){
+function resetCriteriaState(){
+  CRITERIA.forEach(c => c.items.forEach(it => { it.checked = false; it.autoChecked = false; it.note = ''; it.driveLink = ''; it.evidenceTime = ''; it.images = []; it.subChecks = {}; }));
+  agencyIdx = 1;
+  applyAgency();
+}
+
+/* ----- local (browser) storage, one record per station ----- */
+function saveAuditStateLocal(){
   const state = {};
   CRITERIA.forEach(crit => {
     crit.items.forEach(it => {
@@ -553,12 +1027,16 @@ function saveAuditState(){
     });
   });
   state.__meta = { agencyIdx: agencyIdx };
-  try{ localStorage.setItem(LS_AUDIT, JSON.stringify(state)); return true; }catch(e){ return false; }
+  try{ localStorage.setItem(lsKey(auditStation), JSON.stringify(state)); return true; }catch(e){ return false; }
 }
-
-function loadAuditState(){
+function loadAuditStateLocal(code){
+  let raw = null;
+  try{
+    raw = localStorage.getItem(lsKey(code));
+    if(raw == null && code === '1001') raw = localStorage.getItem(LS_AUDIT);   // data saved before per-station storage
+  }catch(e){}
   let state = {};
-  try{ state = JSON.parse(localStorage.getItem(LS_AUDIT) || '{}'); }catch(e){ state = {}; }
+  try{ state = JSON.parse(raw || '{}'); }catch(e){ state = {}; }
   if(state.__meta && typeof state.__meta.agencyIdx === 'number') agencyIdx = state.__meta.agencyIdx;
   CRITERIA.forEach(crit => {
     crit.items.forEach(it => {
@@ -572,6 +1050,116 @@ function loadAuditState(){
     });
   });
 }
+
+/* ----- central database (Supabase) ----- */
+let syncSig = {}, syncAgency = 1, syncTimer = null, syncBusy = false;
+function itemSig(it){ return JSON.stringify([!!it.checked, !!it.autoChecked, it.note || '', it.driveLink || '', it.evidenceTime || '', it.subChecks || {}]); }
+function setSyncStatus(kind, err){
+  const el = document.getElementById('sync-status'); if(!el) return;
+  const map = { loading:['⏳ กำลังโหลดข้อมูลจากฐานข้อมูลกลาง...', ''], saving:['⏳ กำลังบันทึก...', ''], ok:['✓ บันทึกในฐานข้อมูลกลางแล้ว', 'ok'], idle:['☁ เชื่อมต่อฐานข้อมูลกลางแล้ว', 'ok'], error:['⚠ บันทึก/โหลดไม่สำเร็จ: ' + (err && (err.message || err) || ''), 'err'] };
+  const m = map[kind] || ['', ''];
+  el.textContent = DBON() ? m[0] : '💾 บันทึกในเบราว์เซอร์เครื่องนี้ (ยังไม่ได้เชื่อมฐานข้อมูลกลาง)';
+  el.className = 'sync-status ' + (DBON() ? m[1] : '');
+}
+function findItemSafe(critId, no){ const cr = CRITERIA.find(c => c.id === critId); return cr ? cr.items.find(i => i.no === no) : null; }
+async function loadAuditStateDB(code){
+  const d = await window.GeccDB.loadAudit(code);
+  resetCriteriaState();
+  if(d.meta && typeof d.meta.agency_idx === 'number') agencyIdx = d.meta.agency_idx;
+  d.items.forEach(r => {
+    const it = findItemSafe(r.crit, r.item_no); if(!it) return;
+    it.checked = !!r.checked; it.autoChecked = !!r.auto_checked; it.note = r.note || ''; it.driveLink = r.drive_link || '';
+    it.evidenceTime = r.evidence_time || ''; it.subChecks = r.sub_checks || {};
+  });
+  d.images.forEach(r => {
+    const it = findItemSafe(r.crit, r.item_no); if(!it) return;
+    (it.images = it.images || []).push({ name:r.name, url:r.url, id:r.id, path:r.path });
+  });
+  applyAgency();
+  CRITERIA.forEach(c => c.items.forEach(it => { syncSig[evKey(c.id, it.no)] = itemSig(it); }));
+  syncAgency = agencyIdx;
+}
+function scheduleSync(){
+  clearTimeout(syncTimer);
+  setSyncStatus('saving');
+  syncTimer = setTimeout(syncAuditDB, 500);
+}
+async function syncAuditDB(){
+  if(syncBusy){ scheduleSync(); return; }
+  syncBusy = true;
+  const code = auditStation;
+  try{
+    for(const crit of CRITERIA){
+      for(const it of crit.items){
+        const k = evKey(crit.id, it.no), sig = itemSig(it);
+        if(syncSig[k] !== sig){ await window.GeccDB.saveAuditItem(code, crit.id, it.no, it); syncSig[k] = sig; }
+      }
+    }
+    if(syncAgency !== agencyIdx){ await window.GeccDB.saveAuditMeta(code, agencyIdx); syncAgency = agencyIdx; }
+    setSyncStatus('ok');
+  }catch(e){ setSyncStatus('error', e); }
+  finally{ syncBusy = false; }
+}
+async function flushSync(){
+  clearTimeout(syncTimer);
+  let guard = 0;
+  while(syncBusy && guard++ < 50) await new Promise(r => setTimeout(r, 100));
+  await syncAuditDB();
+}
+
+function saveAuditState(){
+  if(DBON()){ scheduleSync(); return true; }
+  return saveAuditStateLocal();
+}
+
+/* ----- station selection ----- */
+async function loadStation(code){
+  auditStation = code;
+  try{ localStorage.setItem('gecc-audit-station', code); }catch(e){}
+  const inp = document.getElementById('audit-station'), r = stRow(code);
+  if(inp) inp.value = r ? stLabel(r) : code;
+  openPanel = null; uploadNotice = {};
+  resetCriteriaState();
+  if(DBON()){
+    setSyncStatus('loading');
+    try{ await loadAuditStateDB(code); setSyncStatus('idle'); }catch(e){ setSyncStatus('error', e); }
+  }else{
+    loadAuditStateLocal(code);
+    setSyncStatus('idle');
+  }
+  applyAgency();
+  saveAuditSchema();
+  renderTabs();
+  renderBody();
+  updateProgress();
+}
+async function onStationPick(v){
+  const inp = document.getElementById('audit-station');
+  const q = normSt(v);
+  let row = null;
+  const m = String(v).trim().match(/^(\d{4})\b/);
+  if(m) row = stRow(m[1]);
+  if(!row && q){
+    let cand = ST_LIST.filter(r => [r[0], r[1], 'สถานี' + r[1], r[2], r[3]].some(x => normSt(x) === q));
+    if(cand.length !== 1) cand = ST_LIST.filter(r => normSt(stLabel(r)).indexOf(q) > -1);
+    if(cand.length === 1) row = cand[0];
+  }
+  if(!row){ const cur = stRow(auditStation); inp.value = cur ? stLabel(cur) : ''; return; }
+  if(row[0] === auditStation){ inp.value = stLabel(row); return; }
+  if(DBON()) await flushSync();
+  await loadStation(row[0]);
+}
+(async function bootAudit(){
+  const dl = document.getElementById('audit-station-list');
+  if(dl) dl.innerHTML = ST_LIST.map(r => '<option value="' + stLabel(r) + '"></option>').join('');
+  if(window.GeccDB){ try{ await window.GeccDB.ready; }catch(e){} }
+  let code = null;
+  const inp = document.getElementById('audit-station');
+  if(roleIsStaff()){ code = ownStationCode(); if(inp) inp.disabled = true; }
+  else{ try{ code = localStorage.getItem('gecc-audit-station'); }catch(e){} }
+  if(!code || !stRow(code)) code = '1001';
+  await loadStation(code);
+})();
 
 function saveAuditSchema(){
   try{
@@ -711,19 +1299,30 @@ async function handleImageUpload(event, critId, no){
   const files = Array.from(event.target.files || []);
   event.target.value = '';
   const msgs = [];
+  const dbMode = DBON();
   let used = lsUsedChars();
   let added = false;
+  if(dbMode){ uploadNotice[key] = ['⏳ กำลังอัปโหลดรูปขึ้นฐานข้อมูลกลาง...']; renderBody(); }
   for(const file of files){
     if(item.images.length >= UP_MAX_IMAGES){ msgs.push('แนบได้สูงสุด ' + UP_MAX_IMAGES + ' รูปต่อข้อ — ข้ามไฟล์ที่เกิน'); break; }
     if(UP_TYPES.indexOf(file.type) === -1){ msgs.push('“' + file.name + '” ไม่รองรับ (รับเฉพาะ JPG, PNG, WebP, GIF)'); continue; }
     if(file.size > UP_MAX_FILE_MB * 1024 * 1024){ msgs.push('“' + file.name + '” ใหญ่เกิน ' + UP_MAX_FILE_MB + ' MB (' + (file.size / 1048576).toFixed(1) + ' MB)'); continue; }
     try{
+      if(dbMode){
+        const blob = await window.GeccDB.toBlob(file, UP_MAX_SIDE, 0.72);
+        const row = await window.GeccDB.addAuditImage(auditStation, critId, no, blob, file.name);
+        item.images.push({ name:file.name, url:row.url, id:row.id, path:row.path });
+        added = true;
+        continue;
+      }
       const url = await downscaleImageToDataURL(file, UP_MAX_SIDE);
       if(used + url.length > UP_QUOTA_CHARS * 0.97){ msgs.push('พื้นที่จัดเก็บในเบราว์เซอร์เต็ม — แนบ “' + file.name + '” ไม่ได้ (ลบรูปเดิมหรือใช้ลิงก์ Google Drive แทน)'); continue; }
       item.images.push({ name: file.name, url: url });
       used += url.length;
       added = true;
-    }catch(e){ msgs.push('“' + file.name + '” เปิดอ่านไม่ได้ (ไฟล์เสียหรือเบราว์เซอร์ไม่รองรับรูปแบบนี้)'); }
+    }catch(e){
+      msgs.push(dbMode ? 'อัปโหลด “' + file.name + '” ไม่สำเร็จ: ' + (e && e.message || e) : '“' + file.name + '” เปิดอ่านไม่ได้ (ไฟล์เสียหรือเบราว์เซอร์ไม่รองรับรูปแบบนี้)');
+    }
   }
   uploadNotice[key] = msgs;
   if(added && !item.checked){
@@ -742,7 +1341,13 @@ async function handleImageUpload(event, critId, no){
 
 function removeImage(critId, no, idx){
   const item = findItem(critId, no);
-  item.images.splice(idx, 1);
+  const img = item.images.splice(idx, 1)[0];
+  if(DBON() && img && img.id){
+    window.GeccDB.deleteAuditImage({ id:img.id, path:img.path }).catch(e => {
+      uploadNotice[evKey(critId, no)] = ['⚠ ลบรูปในฐานข้อมูลไม่สำเร็จ: ' + (e && e.message || e)];
+      renderBody();
+    });
+  }
   if(!hasEvidenceOf(item) && item.autoChecked){
     item.checked = false;
     item.autoChecked = false;
@@ -829,9 +1434,9 @@ function renderBody(){
                 <li><b>ชนิดไฟล์:</b> รูปภาพ JPG / JPEG, PNG, WebP, GIF เท่านั้น (เอกสาร PDF/Word และวิดีโอ ให้แนบเป็นลิงก์ Google Drive ด้านล่าง)</li>
                 <li><b>ขนาดไฟล์:</b> ไม่เกิน ${UP_MAX_FILE_MB} MB ต่อรูป — ระบบย่อรูปอัตโนมัติให้ด้านยาวไม่เกิน ${UP_MAX_SIDE} px</li>
                 <li><b>จำนวน:</b> สูงสุด ${UP_MAX_IMAGES} รูปต่อข้อ (เลือกหลายรูปพร้อมกันได้) — ข้อนี้แนบแล้ว ${images.length}/${UP_MAX_IMAGES} รูป</li>
-                <li><b>พื้นที่จัดเก็บในเบราว์เซอร์:</b> ใช้ไป ${si.mb} / ~5 MB (${si.pct}%) — แนบเพิ่มได้อีกประมาณ ${si.left} รูปทั้งระบบ</li>
+                ${si.central ? '<li><b>ที่เก็บรูป:</b> ฐานข้อมูลกลาง (Supabase) — ทุกเครื่องเห็นตรงกัน ไม่จำกัดตามเบราว์เซอร์</li>' : `<li><b>พื้นที่จัดเก็บในเบราว์เซอร์:</b> ใช้ไป ${si.mb} / ~5 MB (${si.pct}%) — แนบเพิ่มได้อีกประมาณ ${si.left} รูปทั้งระบบ</li>`}
               </ul>
-              <div class="up-bar"><div class="up-bar-fill ${si.pct >= 85 ? 'hi' : (si.pct >= 60 ? 'mid' : '')}" style="width:${si.pct}%"></div></div>
+              ${si.central ? '' : `<div class="up-bar"><div class="up-bar-fill ${si.pct >= 85 ? 'hi' : (si.pct >= 60 ? 'mid' : '')}" style="width:${si.pct}%"></div></div>`}
             </div>`; })()}
             <div class="ev-thumbs" id="ev-thumbs-${key}">${renderThumbs(crit.id, it.no)}</div>
           </div>
@@ -927,16 +1532,6 @@ function runAudit(){
   }, 1800);
 }
 
-loadAuditState();
-applyAgency();
-saveAuditSchema();
-renderTabs();
-renderBody();
-updateProgress();
-try{
-  const stSel = document.querySelector('.station-select select');
-  if(stSel) localStorage.setItem(LS_STATION_NAME, stSel.value);
-}catch(e){}
 </script>
 
 
