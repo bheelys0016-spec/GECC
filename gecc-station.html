@@ -120,6 +120,14 @@
   .photo-add-btn:hover{ border-color:var(--amber-dim); color:var(--amber-dim); }
   .photo-add-btn.done{ border-style:solid; border-color:var(--good); background:rgba(16,185,129,0.1); color:var(--good); }
   .photo-add-btn input{ display:none; }
+  .photo-src{ position:absolute; bottom:10px; left:10px; font-size:11px; font-weight:600; padding:3px 10px; border-radius:20px; background:rgba(17,19,39,0.72); color:#fff; }
+  .photo-src.shared{ background:rgba(16,185,129,0.9); }
+  .photo-src.local{ background:rgba(224,142,0,0.92); }
+  .photo-thumb.local{ border-style:dashed; }
+  .pub-box{ margin-top:12px; padding:12px 14px; border:1px dashed var(--amber-dim); border-radius:12px; background:var(--surface-alt); font-size:12.5px; color:var(--text-dim); line-height:1.65; }
+  .pub-box .pub-t{ font-weight:700; color:var(--text-strong); margin-bottom:3px; }
+  .pub-btn{ margin-top:8px; font-family:var(--font-th); font-size:12.5px; font-weight:600; padding:8px 14px; border-radius:20px; border:none; background:linear-gradient(135deg, var(--ink), #2E3358); color:var(--cream); cursor:pointer; }
+  .pub-warn{ margin-top:6px; color:var(--signal); font-size:12px; }
   .photo-empty{ height:150px; border-radius:14px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:6px; background:repeating-linear-gradient(135deg, var(--divider), var(--divider) 10px, var(--surface-alt) 10px, var(--surface-alt) 20px); font-size:12px; color:var(--text-faint); border:1px solid var(--border); }
 
   .info-grid{ display:grid; grid-template-columns:repeat(3,1fr); gap:14px; margin-bottom:24px; }
@@ -876,6 +884,60 @@ const mainPhotoIdx = {};
   if(moved){ try{ localStorage.setItem('gecc-station-photos', JSON.stringify(STATION_PHOTOS)); }catch(e){} }
 })();
 
+// ===== Published photos: station-photos.json next to the web pages (visible on every device) =====
+let SHARED_PHOTOS = {};
+let HIDDEN_PHOTOS = {};
+try{ HIDDEN_PHOTOS = JSON.parse(localStorage.getItem('gecc-photos-hidden') || '{}'); }catch(e){ HIDDEN_PHOTOS = {}; }
+let sharedState = 'loading';   // loading | ok | none | blocked
+function pKey(p){
+  const s = p.url; let h = 2166136261;
+  for(let i = 0; i < s.length; i += 7){ h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }
+  return s.length + '-' + (h >>> 0);
+}
+function saveHidden(){ try{ localStorage.setItem('gecc-photos-hidden', JSON.stringify(HIDDEN_PHOTOS)); }catch(e){} }
+function allPhotos(id){
+  const hidden = HIDDEN_PHOTOS[id] || [];
+  const shared = (SHARED_PHOTOS[id] || []).filter(function(p){ return hidden.indexOf(pKey(p)) === -1; })
+    .map(function(p){ return { name:p.name, url:p.url, src:'shared' }; });
+  const seen = {}; (SHARED_PHOTOS[id] || []).forEach(function(p){ seen[pKey(p)] = true; });
+  const local = [];
+  (STATION_PHOTOS[id] || []).forEach(function(p, li){ if(!seen[pKey(p)]) local.push({ name:p.name, url:p.url, src:'local', li:li }); });
+  return shared.concat(local);
+}
+function pendingCount(){
+  let n = 0;
+  STATIONS.forEach(function(s){ n += allPhotos(s.id).filter(function(p){ return p.src === 'local'; }).length; });
+  Object.keys(HIDDEN_PHOTOS).forEach(function(id){ n += (HIDDEN_PHOTOS[id] || []).length; });
+  return n;
+}
+function publishPhotos(){
+  const out = {};
+  STATIONS.forEach(function(s){
+    const list = allPhotos(s.id).map(function(p){ return { name:p.name, url:p.url }; });
+    if(list.length) out[s.id] = list;
+  });
+  const blob = new Blob([JSON.stringify({ version:1, updated:new Date().toISOString(), photos:out })], { type:'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = 'station-photos.json';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  setTimeout(function(){ URL.revokeObjectURL(a.href); }, 2000);
+}
+(function loadShared(){
+  fetch('station-photos.json?v=' + Date.now(), { cache:'no-store' })
+    .then(function(r){ if(!r.ok) throw new Error('http ' + r.status); return r.json(); })
+    .then(function(j){
+      SHARED_PHOTOS = (j && j.photos) || {}; sharedState = 'ok';
+      Object.keys(HIDDEN_PHOTOS).forEach(function(id){
+        const have = {}; (SHARED_PHOTOS[id] || []).forEach(function(p){ have[pKey(p)] = true; });
+        HIDDEN_PHOTOS[id] = (HIDDEN_PHOTOS[id] || []).filter(function(k){ return have[k]; });
+        if(!HIDDEN_PHOTOS[id].length) delete HIDDEN_PHOTOS[id];
+      });
+      saveHidden();
+      if(typeof renderProfile === 'function') renderProfile();
+    })
+    .catch(function(){ sharedState = (location.protocol === 'file:') ? 'blocked' : 'none'; if(typeof renderProfile === 'function') renderProfile(); });
+})();
+
 function savePhotos(){
   try{ localStorage.setItem('gecc-station-photos', JSON.stringify(STATION_PHOTOS)); return true; }
   catch(e){ return false; }
@@ -908,23 +970,34 @@ async function handleStationPhotos(event){
   if(!STATION_PHOTOS[activeId]) STATION_PHOTOS[activeId] = [];
   let skipped = false;
   for(const file of files){
-    if(STATION_PHOTOS[activeId].length >= MAX_PHOTOS){ skipped = true; break; }
+    if(allPhotos(activeId).length >= MAX_PHOTOS){ skipped = true; break; }
     try{
       const url = await downscaleImage(file, 1000);
       STATION_PHOTOS[activeId].push({ name:file.name, url:url });
     }catch(e){}
   }
-  mainPhotoIdx[activeId] = STATION_PHOTOS[activeId].length - 1;
+  mainPhotoIdx[activeId] = allPhotos(activeId).length - 1;
   const saved = savePhotos();
   renderProfile();
   if(skipped) alert('อัปโหลดได้สูงสุด ' + MAX_PHOTOS + ' รูปต่อสถานี');
   else if(!saved) alert('พื้นที่จัดเก็บในเบราว์เซอร์เต็ม รูปจะแสดงได้เฉพาะรอบนี้');
 }
 
-function removeStationPhoto(idx){
-  STATION_PHOTOS[activeId].splice(idx, 1);
-  mainPhotoIdx[activeId] = Math.max(0, Math.min(mainPhotoIdx[activeId] || 0, STATION_PHOTOS[activeId].length - 1));
-  savePhotos();
+function removeStationPhoto(i){
+  const list = allPhotos(activeId), p = list[i];
+  if(!p) return;
+  if(p.src === 'shared'){
+    if(!confirm('รูปนี้เผยแพร่แล้ว การลบจะซ่อนในเครื่องนี้ก่อน\nหากต้องการให้หายจากทุกเครื่อง ให้กด "ดาวน์โหลด station-photos.json" แล้วอัปโหลดไฟล์ใหม่ขึ้น GitHub\nลบรูปนี้?')) return;
+    const k = pKey(p);
+    (HIDDEN_PHOTOS[activeId] = HIDDEN_PHOTOS[activeId] || []).push(k);
+    saveHidden();
+    STATION_PHOTOS[activeId] = (STATION_PHOTOS[activeId] || []).filter(function(x){ return pKey(x) !== k; });
+    savePhotos();
+  }else{
+    STATION_PHOTOS[activeId].splice(p.li, 1);
+    savePhotos();
+  }
+  mainPhotoIdx[activeId] = Math.max(0, Math.min(mainPhotoIdx[activeId] || 0, allPhotos(activeId).length - 1));
   renderProfile();
 }
 
@@ -934,25 +1007,38 @@ function selectStationPhoto(idx){
 }
 
 function renderPhotoArea(stationId){
-  const photos = STATION_PHOTOS[stationId] || [];
+  const photos = allPhotos(stationId);
   const addLabel = photos.length
     ? '✓ มีรูปแล้ว ' + photos.length + ' รูป · เพิ่มรูป'
     : '📷 เพิ่มรูปสถานี';
   const addBtn = `<label class="photo-add-btn ${photos.length ? 'done' : ''}">${addLabel}<input type="file" accept="image/*" multiple onchange="handleStationPhotos(event)"></label>`;
+  const pending = pendingCount();
+  const warn = sharedState === 'blocked' ? 'เปิดไฟล์จากในเครื่อง (file://) จึงโหลดรูปที่เผยแพร่ไม่ได้ — ต้องเปิดผ่านเว็บ เช่น GitHub Pages'
+    : (sharedState === 'none' ? 'ยังไม่พบไฟล์ station-photos.json บนเว็บ (ยังไม่เคยเผยแพร่ หรือยังอัปโหลดไม่เสร็จ)' : '');
+  const pub = (pending || warn) ? `
+    <div class="pub-box">
+      <div class="pub-t">☁ ให้เครื่องอื่นเห็นรูปด้วย</div>
+      รูปที่เพิ่มในหน้านี้เก็บอยู่ในเบราว์เซอร์ของเครื่องนี้เท่านั้น${pending ? ' (ยังไม่เผยแพร่ ' + pending + ' รายการ)' : ''}
+      — กดปุ่มด้านล่างเพื่อดาวน์โหลด <b>station-photos.json</b> แล้วนำไปวางในโฟลเดอร์เดียวกับไฟล์เว็บบน GitHub (แทนไฟล์เดิม) รอประมาณ 1–2 นาที เครื่องอื่นจะเห็นรูปเหล่านี้
+      <div><button class="pub-btn" onclick="publishPhotos()">⬇ ดาวน์โหลด station-photos.json</button></div>
+      ${warn ? '<div class="pub-warn">' + warn + '</div>' : ''}
+    </div>` : '';
   if(!photos.length){
-    return `<div class="photo-area"><div class="photo-empty"><span style="font-size:26px;">🖼️</span>ยังไม่มีรูปภาพสถานี</div>${addBtn}</div>`;
+    return `<div class="photo-area"><div class="photo-empty"><span style="font-size:26px;">🖼️</span>ยังไม่มีรูปภาพสถานี</div>${addBtn}${pub}</div>`;
   }
   const idx = Math.min(mainPhotoIdx[stationId] ?? 0, photos.length - 1);
+  const main = photos[idx];
   const thumbs = photos.map((ph, i) => `
-    <div class="photo-thumb ${i === idx ? 'active' : ''}" onclick="selectStationPhoto(${i})">
+    <div class="photo-thumb ${i === idx ? 'active' : ''} ${ph.src}" onclick="selectStationPhoto(${i})">
       <img src="${ph.url}" alt="">
       <button class="photo-remove" onclick="event.stopPropagation(); removeStationPhoto(${i})" title="ลบรูปนี้">×</button>
     </div>`).join('');
   return `
     <div class="photo-area">
-      <div class="photo-main"><img src="${photos[idx].url}" alt="${photos[idx].name}"><span class="photo-count">${idx + 1} / ${photos.length}</span></div>
+      <div class="photo-main"><img src="${main.url}" alt="${main.name}"><span class="photo-count">${idx + 1} / ${photos.length}</span><span class="photo-src ${main.src}">${main.src === 'shared' ? 'เผยแพร่แล้ว' : 'เฉพาะเครื่องนี้'}</span></div>
       <div class="photo-thumbs">${thumbs}</div>
       ${addBtn}
+      ${pub}
     </div>`;
 }
 
