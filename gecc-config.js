@@ -6,5 +6,5 @@
 // ===================================================================
 window.GECC_CONFIG = {
 supabaseUrl: 'https://jntnabjerflzvbqjanmj.supabase.co',      
-supabaseKey: 'sb_publishable_fWZnql7fFK2ilcEuV97h0w_z5oZWcbT'    
+supabaseKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpudG5hYmplcmZsenZicWphbm1qIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTMzMDczNjcsImV4cCI6MjEwODg4MzM2N30.6f4V7zmyJlrF4FMg6rtxzOvG6DZQIHrV8G7gLnNKQqQ'    
 };
