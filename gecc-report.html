@@ -224,6 +224,258 @@
   .as-list{ margin-top:8px; max-height:130px; overflow-y:auto; border-top:1px dashed var(--divider); padding-top:6px; }
   .as-li{ display:flex; justify-content:space-between; font-size:11.5px; color:var(--text-dim); padding:1px 0; }
 </style>
+<!--GECC_BACKEND_START-->
+<script>document.write('<script src="gecc-config.js?t=' + Date.now() + '"><\/script>')</script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script>window.supabase || document.write('<script src="https://unpkg.com/@supabase/supabase-js@2/dist/umd/supabase.js"><\/script>')</script>
+<script>
+/* ===================== GECC central database (Supabase) =====================
+   Inactive until gecc-config.js contains the Supabase URL + anon key.
+   Without it every page keeps working in local (browser-only) mode.            */
+(function(){
+'use strict';
+if(window.GeccDB) return;
+
+var cfg = window.GECC_CONFIG || {};
+var enabled = !!(cfg.supabaseUrl && cfg.supabaseKey && /^https?:\/\//.test(cfg.supabaseUrl) && window.supabase && window.supabase.createClient);
+var BUCKET = 'gecc-files';
+var sb = null;
+if(enabled){
+  try{ sb = window.supabase.createClient(cfg.supabaseUrl, cfg.supabaseKey, { auth:{ persistSession:true, autoRefreshToken:true } }); }
+  catch(e){ enabled = false; sb = null; }
+}
+
+if(cfg.supabaseUrl && cfg.supabaseKey && !enabled){
+  document.addEventListener('DOMContentLoaded', function(){
+    var d = document.createElement('div');
+    d.style.cssText = 'position:fixed;left:0;right:0;top:0;z-index:99999;background:#b42318;color:#fff;padding:8px 14px;font:13px sans-serif;text-align:center';
+    d.textContent = '⚠ เชื่อมต่อฐานข้อมูลกลางไม่ได้: โหลดไลบรารี Supabase ไม่สำเร็จ (ตรวจสอบอินเทอร์เน็ต) — ตอนนี้ข้อมูลจะถูกเก็บในเครื่องนี้เท่านั้น';
+    document.body.appendChild(d);
+  });
+}
+
+var GeccDB = { enabled:enabled, me:null, BUCKET:BUCKET, client:sb };
+window.GeccDB = GeccDB;
+
+/* username -> pseudo e-mail used by Supabase Auth (accounts are created by the admin) */
+function emailOf(u){ return String(u || '').trim().toLowerCase().replace(/\s+/g, '') + '@gecc.app'; }
+GeccDB.emailOf = emailOf;
+
+var LEGACY_OF = { '1001':'BKK-004', '1031':'AYA-011', '1118':'PLK-018', '2114':'NMA-022', '2290':'UBN-030', '4101':'PBI-014', '4239':'SRT-027', '4347':'HDY-033' };
+GeccDB.syncLocal = function(m){
+  try{
+    localStorage.setItem('gecc-role', m.role === 'officer' ? 'auditor' : 'staff');
+    if(m.role === 'staff'){ localStorage.setItem('gecc-station-code', LEGACY_OF[m.station] || m.station); }
+    else{ localStorage.removeItem('gecc-station-code'); }
+  }catch(e){}
+};
+
+function uuid(){
+  if(window.crypto && crypto.randomUUID) return crypto.randomUUID();
+  var b = new Uint8Array(16);
+  if(window.crypto && crypto.getRandomValues) crypto.getRandomValues(b); else for(var i = 0; i < 16; i++) b[i] = Math.floor(Math.random() * 256);
+  b[6] = (b[6] & 0x0f) | 0x40; b[8] = (b[8] & 0x3f) | 0x80;
+  var h = Array.prototype.map.call(b, function(x){ return ('0' + x.toString(16)).slice(-2); }).join('');
+  return h.slice(0, 8) + '-' + h.slice(8, 12) + '-' + h.slice(12, 16) + '-' + h.slice(16, 20) + '-' + h.slice(20);
+}
+GeccDB.uuid = uuid;
+
+/* ---------- auth ---------- */
+GeccDB.loadMe = async function(){
+  if(!enabled) return null;
+  var r = await sb.auth.getSession();
+  var s = r && r.data && r.data.session;
+  if(!s){ GeccDB.me = null; return null; }
+  var p = await sb.from('profiles').select('*').eq('id', s.user.id).maybeSingle();
+  if(p.error || !p.data){ GeccDB.me = { id:s.user.id, noProfile:true }; return GeccDB.me; }
+  GeccDB.me = { id:s.user.id, username:p.data.username, name:p.data.display_name || p.data.username, role:p.data.role, station:p.data.station_code || '' };
+  return GeccDB.me;
+};
+
+GeccDB.signIn = async function(username, password, expectRole){
+  if(!enabled) return { ok:false, error:'disabled' };
+  var r = await sb.auth.signInWithPassword({ email: emailOf(username), password: password });
+  if(r.error) return { ok:false, error:'invalid' };
+  var m = await GeccDB.loadMe();
+  if(!m || m.noProfile){ await sb.auth.signOut(); GeccDB.me = null; return { ok:false, error:'noprofile' }; }
+  if(expectRole && m.role !== expectRole){ await sb.auth.signOut(); GeccDB.me = null; return { ok:false, error:'role' }; }
+  GeccDB.syncLocal(m);
+  return { ok:true, me:m };
+};
+
+GeccDB.signOut = async function(){
+  try{ if(enabled) await sb.auth.signOut(); }catch(e){}
+  try{ localStorage.removeItem('gecc-role'); localStorage.removeItem('gecc-station-code'); }catch(e){}
+  GeccDB.me = null;
+};
+
+/* ready: resolves after the session check; content pages bounce to the login page when not signed in */
+GeccDB.ready = (async function(){
+  if(!enabled) return null;
+  var m = null;
+  try{ m = await GeccDB.loadMe(); }catch(e){ m = null; }
+  if(!m || m.noProfile){
+    try{ localStorage.removeItem('gecc-role'); localStorage.removeItem('gecc-station-code'); }catch(e){}
+    if(!window.__geccNoGuard) location.replace('index.html');
+    return null;
+  }
+  var before = '', after = '';
+  try{ before = (localStorage.getItem('gecc-role') || '') + '|' + (localStorage.getItem('gecc-station-code') || ''); }catch(e){}
+  GeccDB.syncLocal(m);
+  try{ after = (localStorage.getItem('gecc-role') || '') + '|' + (localStorage.getItem('gecc-station-code') || ''); }catch(e){}
+  try{
+    if(before !== after && !sessionStorage.getItem('gecc-rl')){ sessionStorage.setItem('gecc-rl', '1'); location.reload(); }
+    else if(before === after){ sessionStorage.removeItem('gecc-rl'); }
+  }catch(e){}
+  return m;
+})();
+
+document.addEventListener('click', function(ev){
+  if(!enabled) return;
+  var a = ev.target.closest && ev.target.closest('a[href="index.html"]');
+  if(a && /ออกจากระบบ/.test(a.textContent)){
+    ev.preventDefault();
+    GeccDB.signOut().then(function(){ location.href = 'index.html'; });
+  }
+});
+
+/* ---------- images / storage ---------- */
+GeccDB.toBlob = function(file, maxSide, quality){
+  return new Promise(function(resolve, reject){
+    var reader = new FileReader();
+    reader.onerror = reject;
+    reader.onload = function(){
+      var img = new Image();
+      img.onerror = reject;
+      img.onload = function(){
+        var scale = Math.min(1, maxSide / Math.max(img.width, img.height));
+        var c = document.createElement('canvas');
+        c.width = Math.max(1, Math.round(img.width * scale)); c.height = Math.max(1, Math.round(img.height * scale));
+        c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+        c.toBlob(function(b){ if(b) resolve(b); else reject(new Error('toBlob failed')); }, 'image/jpeg', quality || 0.78);
+      };
+      img.src = reader.result;
+    };
+    reader.readAsDataURL(file);
+  });
+};
+
+GeccDB.uploadImage = async function(blob, folder, name){
+  var safe = String(name || 'photo').replace(/[^\w.\-]+/g, '_').slice(-40);
+  var path = folder + '/' + Date.now() + '-' + Math.random().toString(36).slice(2, 8) + '-' + safe;
+  var up = await sb.storage.from(BUCKET).upload(path, blob, { contentType: blob.type || 'image/jpeg', upsert:false });
+  if(up.error) throw up.error;
+  var pub = sb.storage.from(BUCKET).getPublicUrl(path);
+  return { path:path, url:pub.data.publicUrl };
+};
+GeccDB.removeFiles = async function(paths){
+  if(!paths || !paths.length) return;
+  await sb.storage.from(BUCKET).remove(paths);
+};
+
+/* ---------- station photos ---------- */
+GeccDB.listStationPhotos = async function(code){
+  var r = await sb.from('station_photos').select('*').eq('station_code', code).order('created_at', { ascending:true });
+  if(r.error) throw r.error;
+  return r.data || [];
+};
+GeccDB.addStationPhoto = async function(code, blob, name){
+  var up = await GeccDB.uploadImage(blob, 'stations/' + code, name);
+  var r = await sb.from('station_photos').insert({ station_code:code, name:name, path:up.path, url:up.url }).select().single();
+  if(r.error){ try{ await GeccDB.removeFiles([up.path]); }catch(e){} throw r.error; }
+  return r.data;
+};
+GeccDB.deleteStationPhoto = async function(row){
+  var r = await sb.from('station_photos').delete().eq('id', row.id);
+  if(r.error) throw r.error;
+  try{ await GeccDB.removeFiles([row.path]); }catch(e){}
+};
+
+/* ---------- audit (self-assessment) ---------- */
+GeccDB.loadAudit = async function(code){
+  var a = await sb.from('audit_items').select('*').eq('station_code', code);
+  var b = await sb.from('audit_images').select('*').eq('station_code', code).order('created_at', { ascending:true });
+  var c = await sb.from('audit_meta').select('*').eq('station_code', code).maybeSingle();
+  if(a.error) throw a.error; if(b.error) throw b.error; if(c.error) throw c.error;
+  return { items:a.data || [], images:b.data || [], meta:c.data || null };
+};
+GeccDB.saveAuditItem = async function(code, crit, no, f){
+  var row = { station_code:code, crit:crit, item_no:no, checked:!!f.checked, auto_checked:!!f.autoChecked,
+    note:f.note || '', drive_link:f.driveLink || '', evidence_time:f.evidenceTime || '', sub_checks:f.subChecks || {}, updated_at:new Date().toISOString() };
+  var r = await sb.from('audit_items').upsert(row, { onConflict:'station_code,crit,item_no' });
+  if(r.error) throw r.error;
+};
+GeccDB.saveAuditMeta = async function(code, agencyIdx){
+  var r = await sb.from('audit_meta').upsert({ station_code:code, agency_idx:agencyIdx, updated_at:new Date().toISOString() }, { onConflict:'station_code' });
+  if(r.error) throw r.error;
+};
+GeccDB.addAuditImage = async function(code, crit, no, blob, name){
+  var up = await GeccDB.uploadImage(blob, 'audit/' + code, crit + '_' + no + '_' + name);
+  var r = await sb.from('audit_images').insert({ station_code:code, crit:crit, item_no:no, name:name, path:up.path, url:up.url }).select().single();
+  if(r.error){ try{ await GeccDB.removeFiles([up.path]); }catch(e){} throw r.error; }
+  return r.data;
+};
+GeccDB.deleteAuditImage = async function(row){
+  var r = await sb.from('audit_images').delete().eq('id', row.id);
+  if(r.error) throw r.error;
+  try{ await GeccDB.removeFiles([row.path]); }catch(e){}
+};
+
+/* ---------- chat ---------- */
+GeccDB.chatLoad = async function(){
+  var m = await sb.from('chat_messages').select('*').order('created_at', { ascending:false }).limit(1000);
+  var r = await sb.from('chat_reads').select('*');
+  if(m.error) throw m.error; if(r.error) throw r.error;
+  return { messages:(m.data || []).slice().reverse(), reads:r.data || [] };
+};
+GeccDB.chatSend = async function(msg){
+  var r = await sb.from('chat_messages').insert({ id:msg.id, station_code:msg.station_code, sender_role:msg.sender_role, text:msg.text });
+  if(r.error) throw r.error;
+};
+GeccDB.chatRead = async function(code, side, iso){
+  var r = await sb.from('chat_reads').upsert({ station_code:code, side:side, read_at:iso }, { onConflict:'station_code,side' });
+  if(r.error) throw r.error;
+};
+GeccDB.chatSubscribe = function(onMsg, onRead){
+  var ch = sb.channel('gecc-chat');
+  ch.on('postgres_changes', { event:'INSERT', schema:'public', table:'chat_messages' }, function(p){ if(p && p.new) onMsg(p.new); });
+  ch.on('postgres_changes', { event:'*', schema:'public', table:'chat_reads' }, function(p){ if(p && p.new) onRead(p.new); });
+  ch.subscribe();
+  return ch;
+};
+
+
+/* ---------- connection chip (bottom-left): shows whether this browser is on the central database ---------- */
+function mountChip(){
+  if(document.getElementById('gecc-db-chip')) return;
+  var el = document.createElement('a');
+  el.id = 'gecc-db-chip';
+  el.href = 'gecc-check.html';
+  el.title = 'คลิกเพื่อตรวจสอบการเชื่อมต่อฐานข้อมูลกลาง';
+  el.style.cssText = 'position:fixed;left:84px;bottom:24px;z-index:440;padding:5px 12px;border-radius:16px;font:600 11.5px/1.3 "Noto Sans Thai",Sarabun,sans-serif;text-decoration:none;box-shadow:0 4px 12px rgba(0,0,0,.25);white-space:nowrap;color:#fff;max-width:60vw;overflow:hidden;text-overflow:ellipsis;';
+  function paint(){
+    if(enabled){
+      var m = GeccDB.me;
+      el.textContent = '☁ ฐานข้อมูลกลาง' + (m && m.name ? ' · ' + m.name : '');
+      el.style.background = '#10B981';
+    }else if(cfg.supabaseUrl){
+      el.textContent = '⚠ ฐานข้อมูลกลางไม่ทำงาน (คลิกตรวจสอบ)';
+      el.style.background = '#b42318';
+    }else{
+      el.textContent = '💾 โหมดเครื่องนี้ · ยังไม่ซิงค์ข้ามเครื่อง';
+      el.style.background = '#E08E00';
+    }
+  }
+  paint();
+  document.body.appendChild(el);
+  GeccDB.ready.then(paint, paint);
+}
+if(document.body) mountChip(); else document.addEventListener('DOMContentLoaded', mountChip);
+
+})();
+
+</script>
+<!--GECC_BACKEND_END-->
 </head>
 <body>
 
@@ -259,7 +511,10 @@
   <div class="layout">
     <div class="form-block">
       <h3>ข้อมูลหน้าปก</h3>
-      <label class="fld" for="rp-station">ชื่อศูนย์ราชการสะดวก</label>
+      <label class="fld" for="rp-station-pick">สถานีที่ต้องการทำรายงาน</label>
+      <input type="text" id="rp-station-pick" class="fld-input" list="rp-station-list" placeholder="พิมพ์ชื่อ / รหัส / ชื่อย่อสถานี" autocomplete="off">
+      <datalist id="rp-station-list"></datalist>
+      <label class="fld" for="rp-station">ชื่อศูนย์ราชการสะดวก (แก้ไขได้)</label>
       <input type="text" id="rp-station" class="fld-input" placeholder="เช่น สถานีกรุงเทพ (หัวลำโพง)">
       <label class="fld" for="rp-date">วัน เดือน ปี ที่ตรวจประเมิน</label>
       <input type="date" id="rp-date" class="fld-input">
@@ -543,13 +798,510 @@ function rpFallbackSchema(){
   ];
 }
 
+// stations from the SRT code book: [code, name, abbr TH, abbr EN]
+const RP_ST_LIST = [
+["1001","กรุงเทพ","กท.","BKK"],
+["1004","สามเสน","สส.","SAM"],
+["1007","ชุมทางบางซื่อ","บซ.","BSJ"],
+["1000","สถานีกลางกรุงเทพอภิวัฒน์","กภ.","KTW"],
+["1011","บางเขน","บข.","BKH"],
+["1015","หลักสี่","ลส.","LKS"],
+["1017","ดอนเมือง","ดม.","DMU"],
+["1021","รังสิต","รต.","RSI"],
+["1022","เชียงราก","ชร.","CHR"],
+["1024","เชียงรากน้อย","ชน.","CRN"],
+["1026","คลองพุทรา","พซ.","KPS"],
+["1028","บางปะอิน","บอ.","BPI"],
+["1029","บ้านโพ","บพ.","BPH"],
+["1031","อยุธยา","อย.","AYY"],
+["1032","บ้านม้า","มา.","BAA"],
+["1033","มาบพระจันทร์","บจ.","MPC"],
+["1035","พระแก้ว","พก.","PHK"],
+["1036","ชุมทางบ้านภาชี","ภช.","BPJ"],
+["1037","หนองวิวัฒน์","วิ.","NGW"],
+["1039","ท่าเรือ","ทร.","THR"],
+["1041","บ้านหมอ","มอ.","BMO"],
+["1045","หนองโดน","โด.","NDO"],
+["1047","บ้านกลับ","บก.","BKP"],
+["1048","บ้านป่าหวาย","ปว.","BPW"],
+["1050","ลพบุรี","ลบ.","LBR"],
+["1051","ท่าแค","ทแ.","THK"],
+["1053","โคกกะเทียม","คท.","KKT"],
+["1055","หนองเต่า","นต.","NGT"],
+["1056","หนองทรายขาว","ซข.","NSK"],
+["1058","บ้านหมี่","บม.","BAM"],
+["1061","จันเสน","จส.","CHS"],
+["1063","ช่องแค","ชค.","CHK"],
+["1066","โพนทอง","โพ.","POT"],
+["1067","บ้านตาคลี","ตล.","BTK"],
+["1069","ดงมะกุ","ดง.","DMK"],
+["1070","หัวหวาย","หว.","HUW"],
+["1072","หนองโพ","นพ.","NGP"],
+["1074","หัวงิ้ว","หง.","HNG"],
+["1076","เนินมะกอก","มก.","NMA"],
+["1079","เขาทอง","ขท.","KTH"],
+["1082","นครสวรรค์","นว.","NKS"],
+["1083","ปากน้ำโพ","ปพ.","PNP"],
+["1226","บึงบอระเพ็ด","เพ.","BBP"],
+["1084","ทับกฤช","ทก.","TKT"],
+["1086","คลองปลากด","ปก.","KPK"],
+["1088","ชุมแสง","ชส.","CMS"],
+["1091","วังกร่าง","กา.","WAK"],
+["1093","บางมูลนาก","นา.","BMN"],
+["1095","หอไกร","ไก.","HOK"],
+["1097","ดงตะขบ","ดข.","DTK"],
+["1099","ตะพานหิน","ตห.","TPH"],
+["1101","ห้วยเกตุ","ยต.","HKE"],
+["1103","หัวดง","หด.","HUD"],
+["1105","วังกรด","วร.","WKT"],
+["1107","พิจิตร","พจ.","PIC"],
+["1109","ท่าฬ่อ","ทฬ.","THL"],
+["1111","บางกระทุ่ม","ทม.","BKT"],
+["1112","แม่เทียบ","แท.","MAT"],
+["1114","บ้านใหม่","บห.","BMA"],
+["1116","บึงพระ","บะ.","BUP"],
+["1118","พิษณุโลก","พล.","PSL"],
+["1119","บ้านเต็งหนาม","เห.","BTN"],
+["1121","บ้านตูม","ตม.","BTU"],
+["1122","แควน้อย","คน.","KWN"],
+["1125","พรหมพิราม","พห.","PPR"],
+["1127","หนองตม","หต.","NOO"],
+["1130","บ้านบุ่ง","บง.","BBU"],
+["1131","บ้านโคน","บค.","BKN"],
+["1134","พิชัย","พย.","PCH"],
+["1136","ไร่อ้อย","รอ.","ROI"],
+["1137","ชุมทางบ้านดารา","ดร.","BDJ"],
+["1144","ท่าสัก","าส.","THS"],
+["1146","ตรอน","ตอ.","TON"],
+["1148","วังกะพี้","วก.","WKP"],
+["1150","อุตรดิตถ์","อด.","UTD"],
+["1151","ศิลาอาสน์","ศล.","SLA"],
+["1154","บ้านด่าน","บด.","BDA"],
+["1157","ปางต้นผึ้ง","ปต.","PTP"],
+["1160","ห้วยไร่","หา.","HUR"],
+["1164","เด่นชัย","ดช.","DCH"],
+["1165","ปากปาน","ปา.","PPA"],
+["1167","แก่งหลวง","กล.","KAL"],
+["1172","บ้านปิน","บป.","BAP"],
+["1176","ผาคัน","ผน.","PKN"],
+["1180","ปางป๋วย","ปย.","PPU"],
+["1182","แม่จาง","มจ.","MCH"],
+["1184","แม่เมาะ","มม.","MAM"],
+["1187","ศาลาผาลาด","ผล.","SPL"],
+["1189","แม่ทะ","มท.","MTH"],
+["1192","หนองวัวเฒ่า","วถ.","NOW"],
+["1193","นครลำปาง","ลป.","NKL"],
+["1196","ห้างฉัตร","หฉ.","HGC"],
+["1198","ปางม่วง","ปม.","PAM"],
+["1201","แม่ตานน้อย","มต.","MTN"],
+["1204","ขุนตาน","ขน.","KHT"],
+["1206","ทาชมภู","าช.","TCP"],
+["1208","ศาลาแม่ทา","ลท.","SMT"],
+["1212","หนองหล่ม","งล.","NOL"],
+["1216","ลำพูน","ลพ.","LMP"],
+["1218","ป่าเส้า","ปส.","PSO"],
+["1220","สารภี","ภี.","SRP"],
+["1222","เชียงใหม่","ชม.","CGM"],
+["1139","คลองมะพลับ","มป.","KML"],
+["1143","สวรรคโลก","สว.","SWL"],
+["2001","หนองกวย","นก.","NKU"],
+["2002","หนองแซง","นซ.","NSE"],
+["2004","หนองสีดา","นด.","NOA"],
+["2005","บ้านป๊อกแป๊ก","ปป.","BPP"],
+["2007","สระบุรี","ะร.","SRR"],
+["2009","ชุมทางหนองบัว","นบ.","NBU"],
+["2011","ชุมทางแก่งคอย","กค.","KKJ"],
+["2082","มาบกะเบา","มบ.","MKB"],
+["2083","ผาเสด็จ","ผด.","PSD"],
+["2084","หินลับ","หล.","HIL"],
+["2086","มวกเหล็ก","มล.","MUL"],
+["2088","กลางดง","าง.","KDO"],
+["2089","ปางอโศก","โศ.","PAS"],
+["2091","บันไดม้า","ได.","BDM"],
+["2093","ปากช่อง","ปช.","PAC"],
+["2095","ซับม่วง","ซม.","SMU"],
+["2096","จันทึก","จท.","CNT"],
+["2097","คลองขนานจิตร","ขจ.","KKC"],
+["2100","คลองไผ่","คผ.","KPH"],
+["2101","ลาดบัวขาว","ลข.","LBK"],
+["2102","บ้านใหม่สำโรง","สำ.","BMS"],
+["2103","หนองน้ำขุ่น","นข.","NGK"],
+["2105","สีคิ้ว","สค.","SKI"],
+["2107","สูงเนิน","สน.","SNN"],
+["2109","กุดจิก","กจ.","KCK"],
+["2111","โคกกรวด","คก.","KKU"],
+["2113","ภูเขาลาด","ขล.","PKL"],
+["2114","นครราชสีมา","รส.","NRS"],
+["2115","ชุมทางถนนจิระ","จร.","TNJ"],
+["2211","บ้านพะเนา","พเ.","BPN"],
+["2213","ท่าช้าง","ชา.","TCH"],
+["2215","หนองมโนรมย์","มโ.","NOM"],
+["2217","จักราช","จช.","CKR"],
+["2220","บ้านหินโคน","หโ.","BHK"],
+["2222","หินดาษ","ดา.","HID"],
+["2224","ห้วยแถลง","ถล.","HTL"],
+["2227","หนองกระทิง","ทง.","NKT"],
+["2229","ลำปลายมาศ","ลำ.","LPM"],
+["2231","ทะเมนชัย","มช.","TMC"],
+["2233","บ้านแสลงพัน","งพ.","BSP"],
+["2234","บ้านหนองตาด","ตา.","BNT"],
+["2236","บุรีรัมย์","รย.","BRR"],
+["2239","ห้วยราช","หร.","HRA"],
+["2243","กระสัง","ะส.","KSG"],
+["2244","หนองเต็ง","เต.","NOE"],
+["2246","ลำชี","ลช.","LCH"],
+["2248","สุรินทร์","สร.","SUR"],
+["2250","บุฤาษี","บุ.","BRU"],
+["2252","เมืองที","อท.","MUT"],
+["2254","กะโดนค้อ","ดค.","KDK"],
+["2256","ศีขรภูมิ","รภ.","SKP"],
+["2258","บ้านกะลัน","ลน.","BKL"],
+["2261","สำโรงทาบ","สบ.","STP"],
+["2264","ห้วยทับทัน","ทท.","HTT"],
+["2267","อุทุมพรพิสัย","อุ.","UTP"],
+["2270","บ้านเนียม","บเ.","BNI"],
+["2273","ศรีสะเกษ","เก.","SSK"],
+["2277","หนองแวง","อว.","NNW"],
+["2279","บ้านคล้อ","าค.","BNK"],
+["2281","กันทรารมย์","าร.","KTR"],
+["2285","ห้วยขยุง","ขย.","HKY"],
+["2288","บุ่งหวาย","งห.","BWI"],
+["2290","อุบลราชธานี","อน.","UBR"],
+["2117","บ้านเกาะ","กะ.","BAK"],
+["2120","บ้านกระโดน","กโ.","BKD"],
+["2121","หนองแมว","นง.","NNM"],
+["2122","โนนสูง","นโ.","NSU"],
+["2124","บ้านดงพลอง","ดพ.","BDP"],
+["2126","บ้านมะค่า","มค.","BMK"],
+["2128","พลสงคราม","พค.","PSK"],
+["2129","บ้านดอนใหญ่","ดญ.","BDY"],
+["2131","เมืองคง","งค.","MUK"],
+["2133","โนนทองหลาง","นท.","NTL"],
+["2136","ชุมทางบัวใหญ่","วญ.","BYJ"],
+["2139","หนองบัวลาย","งบ.","NNB"],
+["2142","หนองมะเขือ","งอ.","NMK"],
+["2144","เมืองพล","อล.","MUP"],
+["2149","บ้านหัน","าห.","BHN"],
+["2152","บ้านไผ่","บผ.","PHI"],
+["2156","บ้านแฮด","ฮด.","BHT"],
+["2160","ท่าพระ","พะ.","TAP"],
+["2163","ขอนแก่น","ขอ.","KHK"],
+["2166","สำราญ","าญ.","SAR"],
+["2170","โนนพะยอม","พอ.","NPY"],
+["2172","น้ำพอง","อง.","NPO"],
+["2174","ห้วยเสียว","ยว.","HUS"],
+["2177","เขาสวนกวาง","สง.","KSK"],
+["2181","โนนสะอาด","โอ.","NSA"],
+["2183","ห้วยเกิ้ง","ยก.","HKG"],
+["2186","กุมภวาปี","วป.","KWP"],
+["2188","ห้วยสามพาด","หพ.","HSP"],
+["2190","หนองตะไก้","งต.","NNT"],
+["2194","หนองขอนกว้าง","ออ.","NKK"],
+["2195","อุดรธานี","รด.","UTN"],
+["2201","นาพู่","พู.","NPU"],
+["2207","นาทา","ยน.","NAA"],
+["2209","หนองคาย","นค.","NKI"],
+["2012","บ้านช่องใต้","ชต.","BCT"],
+["2017","หินซ้อน","หซ.","HIS"],
+["2020","แก่งเสือเต้น","แส.","KST"],
+["2024","โคกสลุง","คุ.","KSL"],
+["2026","สุรนารายณ์","ะน.","SNR"],
+["2033","ลำนารายณ์","ลา.","LNR"],
+["2038","แผ่นดินทอง","แง.","PDT"],
+["2042","โคกคลี","คี.","KKI"],
+["2045","ช่องสำราญ","อช.","CSR"],
+["2049","บ้านวะตะแบก (เทพสถิต)","แบ.","BWT"],
+["2052","ห้วยยายจิ๋ว","จย.","HYC"],
+["2057","บำเหน็จณรงค์","าจ.","BNN"],
+["2062","จัตุรัส","จต.","CTR"],
+["2066","หนองฉิม","ฉม.","NOC"],
+["2072","บ้านเหลื่อม","นเ.","BLM"],
+["2076","หนองพลวง","งว.","NNP"],
+["3001","มักกะสัน","มส.","MKS"],
+["3009","คลองตัน","คต.","KOT"],
+["3010","หัวหมาก","หม.","HUM"],
+["3012","บ้านทับช้าง","ทช.","BTC"],
+["3014","ลาดกระบัง","ะบ.","LKB"],
+["3015","หัวตะเข้","หข.","HTK"],
+["3017","คลองหลวงแพ่ง","คพ.","KLP"],
+["3019","คลองเปรง","คป.","PRE"],
+["3021","คลองบางพระ","คบ.","KBP"],
+["3023","ชุมทางฉะเชิงเทรา","ฉท.","CHJ"],
+["3055","บางน้ำเปรี้ยว","บย.","BGP"],
+["3057","ชุมทางคลองสิบเก้า","สเ.","KSI"],
+["3059","โยทะกา","ยท.","YTK"],
+["3061","บ้านสร้าง","สา.","BSA"],
+["3064","บ้านปากพลี","าป.","BPA"],
+["3066","ปราจีนบุรี","ปจ.","PCB"],
+["3068","โคกมะกอก","กอ.","KMK"],
+["3070","ประจันตคาม","จค.","PTK"],
+["3072","บ้านดงบัง","ดบ.","BDB"],
+["3075","กบินทร์บุรี","กบ.","KBB"],
+["3078","หนองสัง","อส.","NNS"],
+["3083","บ้านแก้ง","นแ.","BKE"],
+["3087","สระแก้ว","ะก.","SKA"],
+["3094","วัฒนานคร","วค.","WTN"],
+["3100","อรัญประเทศ","อร.","ARP"],
+["3130","ด่านพรมแดนบ้านคลองลึก","ลง.","BLK"],
+["3118","องครักษ์","อษ.","OKA"],
+["3120","วิหารแดง","วแ.","WHD"],
+["3121","บุใหญ่","ให.","BUY"],
+["3122","ชุมทางบ้านไผ่นาบุญ","บญ.","BPB"],
+["3026","ดอนสีนนท์","ดอ.","DSN"],
+["3029","พานทอง","งท.","PHT"],
+["3032","ชลบุรี","ชบ.","COB"],
+["3034","บางพระ","ระ.","PRA"],
+["3036","ชุมทางศรีราชา","ศช.","SRC"],
+["3039","บางละมุง","มุ.","BGL"],
+["3041","พัทยา","พา.","PTY"],
+["3043","บ้านห้วยขวาง","ยข.","BHW"],
+["3045","ชุมทางเขาชีจรรย์","ชจ.","KCC"],
+["3047","บ้านพลูตาหลวง","พต.","PTG"],
+["3048","อู่ตะเภา","อภ.","UTA"],
+["3049","จุกเสม็ด","จเ.","CAM"],
+["3110","บ้านฉาง","บฉ.","BNC"],
+["3115","มาบตาพุด","าพ.","MTP"],
+["3002","แม่น้ำ","มน.","MAN"],
+["4005","บางบำหรุ","บำ.","BGB"],
+["4004","ชุมทางตลิ่งชัน","ตช.","TCJ"],
+["4002","ธนบุรี","ธบ.","TBR"],
+["4008","ศาลาธรรมสพน์","ทพ.","STS"],
+["4009","ศาลายา","ลย.","SLY"],
+["4010","วัดสุวรรณ","สุ.","WSW"],
+["4012","วัดงิ้วราย","งร.","WRI"],
+["4013","นครชัยศรี","รช.","NCS"],
+["4014","ท่าแฉลบ","ฉล.","TCL"],
+["4015","ต้นสำโรง","โร.","TSR"],
+["4016","นครปฐม","คฐ.","NPT"],
+["4018","โพรงมะเดื่อ","พด.","PMD"],
+["4019","คลองบางตาล","บา.","KBT"],
+["4020","ชุมทางหนองปลาดุก","ปด.","NPJ"],
+["4079","บ้านโป่ง","โป.","BAG"],
+["4081","นครชุมน์","นช.","NCH"],
+["4082","คลองตาคด","ตค.","KTK"],
+["4083","โพธาราม","พร.","PTR"],
+["4085","เจ็ดเสมียน","จม.","CSM"],
+["4087","บ้านกล้วย","าก.","BKI"],
+["4089","ราชบุรี","รร.","RBR"],
+["4090","บ้านคูบัว","บบ.","BKB"],
+["4091","บ่อตะคร้อ","บร.","BOT"],
+["4093","ปากท่อ","ปท.","PTO"],
+["4095","บางเค็ม","งเ.","BGK"],
+["4097","เขาย้อย","เข.","KYO"],
+["4098","หนองปลาไหล","ปล.","NPL"],
+["4099","บางจาก","จก.","BGC"],
+["4101","เพชรบุรี","พบ.","PBR"],
+["4104","เขาทโมน","โม.","KTM"],
+["4105","หนองไม้เหลือง","นม.","NML"],
+["4107","หนองจอก","หจ.","NNC"],
+["4108","หนองศาลา","งา.","NOS"],
+["4111","ชะอำ","ชอ.","CHA"],
+["4114","ห้วยทรายเหนือ","ซน.","HSN"],
+["4115","ห้วยทรายใต้","ซใ.","HST"],
+["4118","หัวหิน","หห.","HHI"],
+["4119","หนองแก","นอ.","NKA"],
+["4120","สวนสนประดิพัทธ์","สป.","SSP"],
+["4121","เขาเต่า","ขต.","KTO"],
+["4123","วังก์พง","วพ.","WPO"],
+["4124","ปราณบุรี","ปน.","PAB"],
+["4126","หนองคาง","อค.","NKH"],
+["4128","สามร้อยยอด","สย.","SRY"],
+["4130","สามกระทาย","สท.","SKT"],
+["4133","กุยบุรี","กย.","KBR"],
+["4135","บ่อนอก","บน.","BON"],
+["4138","ทุ่งมะเม่า","มเ.","TMM"],
+["4140","คั่นกระได","กด.","KKD"],
+["4142","ประจวบคีรีขันธ์","จข.","PKK"],
+["4146","วังด้วน","วด.","WDN"],
+["4149","ห้วยยาง","หย.","HUY"],
+["4153","ทับสะแก","สก.","TSK"],
+["4158","บ้านกรูด","กร.","BUT"],
+["4161","นาผักขวง","ผข.","NPK"],
+["4163","บางสะพานใหญ่","พญ.","BSY"],
+["4165","ชะม่วง","ชว.","CMU"],
+["4167","บางสะพานน้อย","พน.","BSN"],
+["4169","ห้วยสัก","ยส.","HAS"],
+["4172","เขาไชยราช","ขช.","KCR"],
+["4175","มาบอำมฤต","มร.","MMR"],
+["4178","คลองวังช้าง","คช.","KWC"],
+["4179","ปะทิว","ะท.","PTI"],
+["4181","บ้านคอกม้า","คา.","BKM"],
+["4182","สะพลี","สี.","SPI"],
+["4184","นาชะอัง","ชง.","NCA"],
+["4186","ชุมพร","ชพ.","CUP"],
+["4187","แสงแดด","สด.","SDA"],
+["4189","ทุ่งคา","ทค.","TKA"],
+["4191","วิสัย","ไส.","WSI"],
+["4194","สวี","ะว.","SWI"],
+["4196","เขาสวนทุเรียน","ขร.","KSU"],
+["4199","ปากตะโก","ตก.","PAT"],
+["4201","ควนหินมุ้ย","มย.","KHM"],
+["4203","หลังสวน","งส.","LSU"],
+["4205","คลองขนาน","คข.","KKN"],
+["4208","ละแม","แม.","LMA"],
+["4210","บ้านดวด","ดว.","BDU"],
+["4212","คันธุลี","คล.","KTL"],
+["4213","ดอนธูป","ดธ.","DOT"],
+["4215","ท่าชนะ","นะ.","TCN"],
+["4218","เขาพนมแบก","ขบ.","KPN"],
+["4221","ไชยา","ชย.","CIY"],
+["4224","ท่าฉาง","ทฉ.","TAC"],
+["4226","คลองไทร","คไ.","KLS"],
+["4227","มะลวน","ลว.","MLU"],
+["4229","ชุมทางบ้านทุ่งโพธิ์","ทโ.","TPJ"],
+["4239","สุราษฎร์ธานี","รท.","SRN"],
+["4241","เขาหัวควาย","ขค.","KOH"],
+["4245","เขาพลู","ขพ.","KOP"],
+["4247","บ้านนา","นน.","BNA"],
+["4249","ห้วยมุด","มด.","HMU"],
+["4250","นาสาร","นส.","NSN"],
+["4253","พรุพี","พพ.","PUP"],
+["4255","บ้านส้อง","สอ.","BAS"],
+["4257","บ้านพรุกระแชง","แช.","BKC"],
+["4258","ห้วยปริก","หป.","HUP"],
+["4259","กระเบียด","เบ.","KBI"],
+["4261","ทานพอ","ทา.","TPO"],
+["4262","ฉวาง","ฉว.","CAW"],
+["4264","คลองจันดี","จด.","KCD"],
+["4266","หลักช้าง","หช.","LAC"],
+["4268","นาบอน","าอ.","NAB"],
+["4269","คลองจัง","คจ.","KOC"],
+["4270","ชุมทางทุ่งสง","ทส.","TSJ"],
+["4295","ใสใหญ่","สใ.","SYI"],
+["4297","ช่องเขา","ชข.","CKH"],
+["4299","ร่อนพิบูลย์","รบ.","ROP"],
+["4300","ชุมทางเขาชุมทอง","ชท.","KCJ"],
+["4310","ควนหนองคว้า","คว.","KNK"],
+["4312","บ้านตูล","ตน.","BAT"],
+["4315","ชะอวด","ชด.","CHU"],
+["4317","บ้านนางหลง","นล.","BNL"],
+["4318","บ้านขอนหาด","ขห.","BHH"],
+["4319","แหลมโตนด","โน.","LTN"],
+["4321","ปากคลอง","ปค.","PKH"],
+["4325","พัทลุง","พท.","PTL"],
+["4328","บ้านต้นโดน","บโ.","BTD"],
+["4330","เขาชัยสน","เช.","KCS"],
+["4331","บางแก้ว","แก.","BAE"],
+["4334","ควนเคี่ยม","คเ.","KUK"],
+["4336","หารเทา","หท.","HAT"],
+["4338","โคกทราย","โท.","KKS"],
+["4340","ควนเนียง","เน.","KNN"],
+["4342","บ้านเกาะใหญ่","กใ.","BYI"],
+["4344","บางกล่ำ","บล.","BGM"],
+["4345","บ้านดินลาน","ดล.","BDL"],
+["4347","ชุมทางหาดใหญ่","หใ.","HYJ"],
+["4377","นาม่วง","มง.","NMU"],
+["4381","วัดควนมีด","วม.","WKM"],
+["4384","จะนะ","จน.","CAN"],
+["4386","ท่าแมงลัก","งก.","TML"],
+["4388","เกาะสะบ้า","กส.","KSB"],
+["4391","เทพา","เท.","TPA"],
+["4393","ตาแปด","ตป.","TPE"],
+["4395","ปัตตานี","นี.","PTN"],
+["4397","นาประดู่","าด.","NPD"],
+["4437","วัดช้างให้","ชห.","WCH"],
+["4399","คลองทราย","คซ.","KOI"],
+["4400","ตาเซะ","ตซ.","TAS"],
+["4402","ยะลา","ยล.","YLA"],
+["4405","ไม้แก่น","ไม.","MIK"],
+["4408","รามัน","รั.","RMA"],
+["4409","บาลอ","าล.","BAL"],
+["4411","รือเสาะ","สะ.","RUS"],
+["4414","ลาโละ","ลล.","LLO"],
+["4416","มะรือโบ","โบ.","MRB"],
+["4419","ตันหยงมัส","ยม.","TYM"],
+["4421","ป่าไผ่","ปผ.","PAP"],
+["4423","เจาะไอร้อง","จอ.","CIR"],
+["4424","บูกิต","บู.","BUK"],
+["4427","โต๊ะเด็ง","ตด.","TOD"],
+["4428","สุไหงปาดี","งด.","SGP"],
+["4432","สุไหงโก-ลก","โล.","SGK"],
+["4368","คลองแงะ","คง.","KNG"],
+["4373","ปาดังเบซาร์ (ไทย)","ปซ.๒","PBT"],
+["4374","ปาดังเบซาร์","ปซ.","PBS"],
+["4042","สุพรรณบุรี","สพ.","SPB"],
+["4044","สระโกสินารายณ์","สโ.","SKS"],
+["4045","ลูกแก","ลแ.","LUK"],
+["4048","ท่าเรือน้อย","ทน.","TRN"],
+["4051","ท่าม่วง","าม.","TMG"],
+["4057","กาญจนบุรี","กญ.","KCB"],
+["4063","วังเย็น","วย.","WYN"],
+["4069","ท่ากิเลน","กน.","TKL"],
+["4073","วังโพ","วง.","WAP"],
+["4077","น้ำตก","าต.","NAT"],
+["4238","คีรีรัฐนิคม","รค.","KRR"],
+["4272","ที่วัง","ทว.","TWG"],
+["4281","ห้วยยอด","ยอ.","HYO"],
+["4289","ตรัง","ตร.","TRG"],
+["4294","กันตัง","กต.","KAT"],
+["4302","บ้านทุ่งหล่อ","ลอ.","BLO"],
+["4303","โคกคราม","คค.","KKA"],
+["4308","นครศรีธรรมราช","ธำ.","NST"],
+["5001","วงเวียนใหญ่","งญ.","WWY"],
+["5003","ตลาดพลู","ลู.","TLP"],
+["5008","วัดสิงห์","สิ.","WTS"],
+["5012","รางโพธิ์","รโ.","RPO"],
+["5018","มหาชัย","ชั.","MHC"],
+["5019","บ้านแหลม","แห.","BLA"],
+["5032","แม่กลอง","แอ.","MKO"]
+];
+const RP_LEGACY = { 'BKK-004':'1001', 'AYA-011':'1031', 'PLK-018':'1118', 'NMA-022':'2114', 'UBN-030':'2290', 'PBI-014':'4101', 'SRT-027':'4239', 'HDY-033':'4347' };
+let rpCode = '1001';
+const RP_DB_CACHE = {};
+let rpFetching = false;
+const rpDbOn = () => !!(window.GeccDB && window.GeccDB.enabled);
+function rpNorm(s){ return String(s || '').toLowerCase().replace(/[\s\.\-_()·]/g, ''); }
+function rpStRow(code){ return RP_ST_LIST.find(r => r[0] === code); }
+function rpStLabel(r){ return r[0] + ' · ' + r[1] + ' · ' + r[2] + ' · ' + r[3]; }
+function rpStFullName(r){ return r[1].indexOf('สถานี') === 0 ? r[1] : 'สถานี' + r[1]; }
+function rpIsStaff(){ try{ return localStorage.getItem('gecc-role') === 'staff'; }catch(e){ return false; } }
+function rpOwnStation(){
+  if(rpDbOn() && window.GeccDB.me && window.GeccDB.me.station) return window.GeccDB.me.station;
+  let c = 'BKK-004'; try{ c = (localStorage.getItem('gecc-station-code') || 'BKK-004').toUpperCase(); }catch(e){}
+  return RP_LEGACY[c] || c;
+}
+async function rpFetchDB(code){
+  const d = await window.GeccDB.loadAudit(code);
+  const state = {};
+  d.items.forEach(r => {
+    state[r.crit + '_' + r.item_no] = { checked:!!r.checked, autoChecked:!!r.auto_checked, note:r.note || '', driveLink:r.drive_link || '', evidenceTime:r.evidence_time || '', subChecks:r.sub_checks || {}, images:[] };
+  });
+  d.images.forEach(r => {
+    const k = r.crit + '_' + r.item_no;
+    (state[k] = state[k] || { checked:false, note:'', driveLink:'', evidenceTime:'', subChecks:{}, images:[] }).images.push({ name:r.name, url:r.url });
+  });
+  state.__meta = { agencyIdx: (d.meta && typeof d.meta.agency_idx === 'number') ? d.meta.agency_idx : 1 };
+  RP_DB_CACHE[code] = { state:state };
+}
+async function rpInlineImages(crits){
+  const cache = {};
+  for(const c of crits) for(const it of c.items) for(const im of (it.images || [])){
+    if(!/^https?:/i.test(im.url)) continue;
+    if(cache[im.url]){ im.url = cache[im.url]; continue; }
+    try{
+      const r = await fetch(im.url); const b = await r.blob();
+      const du = await new Promise((ok, no) => { const fr = new FileReader(); fr.onload = () => ok(fr.result); fr.onerror = no; fr.readAsDataURL(b); });
+      cache[im.url] = du; im.url = du;
+    }catch(e){}
+  }
+}
+
 function rpLoadAudit(){
   let schema = null, state = {};
   try{ schema = JSON.parse(localStorage.getItem(RP_LS_SCHEMA) || 'null'); }catch(e){}
-  try{ state = JSON.parse(localStorage.getItem(RP_LS_AUDIT) || '{}'); }catch(e){}
+  if(rpDbOn()){
+    state = (RP_DB_CACHE[rpCode] && RP_DB_CACHE[rpCode].state) || {};
+  }else{
+    try{
+      let raw = localStorage.getItem(RP_LS_AUDIT + ':' + rpCode);
+      if(raw == null && rpCode === '1001') raw = localStorage.getItem(RP_LS_AUDIT);
+      state = JSON.parse(raw || '{}');
+    }catch(e){ state = {}; }
+  }
   if(!schema || !schema.length) schema = rpFallbackSchema();
+  const agIdx = (state.__meta && typeof state.__meta.agencyIdx === 'number') ? state.__meta.agencyIdx : 1;
   return schema.map(c => ({
-    id:c.id, name:c.name, meta:c.meta, agency:c.agency || null,
+    id:c.id, name:c.name, meta:c.meta, agency:(c.id === 2 ? { idx:agIdx, name:RP_AG_NAMES[agIdx] } : null),
     items:c.items.map(it => {
       const st = state[c.id + '_' + it.no] || {};
       return Object.assign({}, it, {
@@ -861,8 +1613,10 @@ async function rpEnsureFonts(){
 }
 
 async function rpBuildAll(){
+  if(rpDbOn()){ try{ await rpFetchDB(rpCode); }catch(e){ throw new Error('โหลดข้อมูลจากฐานข้อมูลกลางไม่สำเร็จ: ' + (e && e.message || e)); } }
   const crits = rpLoadAudit();
   if(!crits) return null;
+  await rpInlineImages(crits);
   await rpEnsureFonts();
   const meta = await rpLoadSizes(crits);
   const opts = rpOptions(), station = rpStationName(), dateIso = rpDateIso();
@@ -910,8 +1664,7 @@ async function generateReport(){
       });
     }
     holder.innerHTML = '';
-    const code = (rpStationName().match(/[A-Za-z]{3}-\d+/) || ['station'])[0];
-    doc.save('GECC-2569-Self-Assessment-' + code + '.pdf');
+    doc.save('GECC-2569-Self-Assessment-' + rpCode + '.pdf');
     rpSetStatus('สร้างรายงานเรียบร้อย (' + built.pages.length + ' หน้า) — ไฟล์ถูกดาวน์โหลดแล้ว');
     dl.textContent = '✓ ดาวน์โหลดแล้ว — คลิกเพื่อสร้างใหม่';
     dl.classList.add('show');
@@ -951,13 +1704,27 @@ async function printReport(){
 }
 
 // ---------- Page UI: summary + live preview ----------
+function rpReload(){ delete RP_DB_CACHE[rpCode]; rpRefreshUI(); }
 function rpRefreshUI(){
+  if(rpDbOn() && !RP_DB_CACHE[rpCode]){
+    const sumEl0 = document.getElementById('audit-summary');
+    if(!rpFetching){
+      rpFetching = true;
+      if(sumEl0) sumEl0.innerHTML = '<div class="as-h">⏳ กำลังโหลดข้อมูลจากฐานข้อมูลกลาง...</div>';
+      rpFetchDB(rpCode).then(() => { rpFetching = false; rpRefreshUI(); })
+        .catch(e => { rpFetching = false; RP_DB_CACHE[rpCode] = { state:{} }; if(sumEl0) sumEl0.innerHTML = '<div class="as-warn">โหลดข้อมูลจากฐานข้อมูลกลางไม่สำเร็จ: ' + rpEsc(e && e.message || e) + '</div>'; });
+    }
+    return;
+  }
   const crits = rpLoadAudit();
   const sumEl = document.getElementById('audit-summary');
   const pv1 = document.getElementById('pv-1'), pv2 = document.getElementById('pv-2');
   const sc = rpScores(crits), station = rpStationName(), dateIso = rpDateIso();
   let hasSaved = false;
-  try{ hasSaved = Object.keys(JSON.parse(localStorage.getItem(RP_LS_AUDIT) || '{}')).length > 0; }catch(e){}
+  try{
+    if(rpDbOn()) hasSaved = Object.keys((RP_DB_CACHE[rpCode] && RP_DB_CACHE[rpCode].state) || {}).filter(k => k !== '__meta').length > 0;
+    else{ let raw = localStorage.getItem(RP_LS_AUDIT + ':' + rpCode); if(raw == null && rpCode === '1001') raw = localStorage.getItem(RP_LS_AUDIT); hasSaved = Object.keys(JSON.parse(raw || '{}')).filter(k => k !== '__meta').length > 0; }
+  }catch(e){}
   const evItems = [];
   crits.forEach(c => c.items.forEach(it => {
     const n = it.images ? it.images.length : 0, hasNote = !!(it.note && it.note.trim()), hasLink = !!it.driveLink;
@@ -968,7 +1735,7 @@ function rpRefreshUI(){
     : '';
   const warn = hasSaved ? '' : '<div class="as-warn" style="margin-bottom:8px;">ยังไม่มีข้อมูลที่บันทึกจากหน้าตรวจประเมิน — <a href="gecc-audit.html">เปิดหน้าตรวจประเมิน</a> เพื่อติ๊กข้อและแนบหลักฐาน แล้วกลับมากด “รีเฟรชข้อมูล”</div>';
   sumEl.innerHTML = warn +
-    '<div class="as-h">ข้อมูลที่ดึงจากหน้าตรวจประเมิน <button class="as-refresh" onclick="rpRefreshUI()" type="button">↻ รีเฟรชข้อมูล</button></div>' +
+    '<div class="as-h">ข้อมูลที่ดึงจากหน้าตรวจประเมิน' + (rpDbOn() ? ' (ฐานข้อมูลกลาง)' : '') + ' <button class="as-refresh" onclick="rpReload()" type="button">↻ รีเฟรชข้อมูล</button></div>' +
     '<div class="as-r"><span>ติ๊กดำเนินการแล้ว</span><b>' + sc.checkedAll + ' / ' + sc.totalAll + ' ข้อ</b></div>' +
     '<div class="as-r"><span>ข้อที่มีหลักฐานแนบ</span><b>' + sc.evCount + ' ข้อ</b></div>' +
     '<div class="as-r"><span>รูปภาพ / รายละเอียด / ลิงก์ Drive</span><b>' + sc.imgCount + ' / ' + sc.noteCount + ' / ' + sc.linkCount + '</b></div>' +
@@ -978,19 +1745,45 @@ function rpRefreshUI(){
   pv2.innerHTML = rpWrap(rpLevelInner(sc, station), 2, station);
 }
 
-(function rpInit(){
-  const st = document.createElement('style'); st.id = 'rp-style'; st.textContent = RP_CSS; document.head.appendChild(st);
-  let saved = null;
-  try{ saved = localStorage.getItem(RP_LS_STATION); }catch(e){}
-  const stEl = document.getElementById('rp-station');
-  stEl.value = saved ? saved.replace(/^[A-Za-z]{3}-\d+\s*·\s*/, '') : 'สถานีกรุงเทพ (หัวลำโพง)';
-  document.getElementById('rp-date').value = new Date().toISOString().slice(0, 10);
-  ['rp-station', 'rp-date'].forEach(id => document.getElementById(id).addEventListener('input', rpRefreshUI));
+function rpOnPick(v){
+  const inp = document.getElementById('rp-station-pick');
+  const q = rpNorm(v);
+  let row = null;
+  const m = String(v).trim().match(/^(\d{4})\b/);
+  if(m) row = rpStRow(m[1]);
+  if(!row && q){
+    let cand = RP_ST_LIST.filter(r => [r[0], r[1], 'สถานี' + r[1], r[2], r[3]].some(x => rpNorm(x) === q));
+    if(cand.length !== 1) cand = RP_ST_LIST.filter(r => rpNorm(rpStLabel(r)).indexOf(q) > -1);
+    if(cand.length === 1) row = cand[0];
+  }
+  if(!row){ const cur = rpStRow(rpCode); inp.value = cur ? rpStLabel(cur) : ''; return; }
+  rpSetStation(row[0]);
+}
+function rpSetStation(code){
+  const r = rpStRow(code); if(!r) return;
+  rpCode = code;
+  try{ localStorage.setItem('gecc-audit-station', code); }catch(e){}
+  document.getElementById('rp-station-pick').value = rpStLabel(r);
+  document.getElementById('rp-station').value = rpStFullName(r);
   rpRefreshUI();
+}
+(async function rpInit(){
+  const st = document.createElement('style'); st.id = 'rp-style'; st.textContent = RP_CSS; document.head.appendChild(st);
+  document.getElementById('rp-station-list').innerHTML = RP_ST_LIST.map(r => '<option value="' + rpStLabel(r) + '"></option>').join('');
+  document.getElementById('rp-date').value = new Date().toISOString().slice(0, 10);
+  if(window.GeccDB){ try{ await window.GeccDB.ready; }catch(e){} }
+  let code = null;
+  const pick = document.getElementById('rp-station-pick');
+  pick.addEventListener('change', () => rpOnPick(pick.value));
+  if(rpIsStaff()){ code = rpOwnStation(); pick.disabled = true; }
+  else{ try{ code = localStorage.getItem('gecc-audit-station'); }catch(e){} }
+  if(!code || !rpStRow(code)) code = '1001';
+  ['rp-station', 'rp-date'].forEach(id => document.getElementById(id).addEventListener('input', rpRefreshUI));
+  rpSetStation(code);
   if(document.fonts && document.fonts.ready) document.fonts.ready.then(rpRefreshUI);
-  window.addEventListener('storage', ev => { if(ev.key === RP_LS_AUDIT || ev.key === RP_LS_SCHEMA) rpRefreshUI(); });
-  window.addEventListener('focus', rpRefreshUI);
-  document.addEventListener('visibilitychange', () => { if(!document.hidden) rpRefreshUI(); });
+  window.addEventListener('storage', ev => { if(!rpDbOn() && ev.key && ev.key.indexOf(RP_LS_AUDIT) === 0) rpRefreshUI(); });
+  window.addEventListener('focus', () => { if(!rpDbOn()) rpRefreshUI(); });
+  document.addEventListener('visibilitychange', () => { if(!document.hidden && !rpDbOn()) rpRefreshUI(); });
 })();
 /*RP_ENGINE_END*/
 </script>
@@ -1713,10 +2506,12 @@ function loadStore(){
   if(!s || !s.threads){ s = seed(); try{ localStorage.setItem(LS_KEY, JSON.stringify(s)); }catch(e){} }
   return s;
 }
-var store = loadStore();
+var DBON = !!(window.GeccDB && window.GeccDB.enabled);   // central database (Supabase) mode
+var store = DBON ? { v:2, threads:{} } : loadStore();
 var lastRaw = '';
 try{ lastRaw = localStorage.getItem(LS_KEY) || ''; }catch(e){}
 function saveStore(){
+  if(DBON) return;
   try{ lastRaw = JSON.stringify(store); localStorage.setItem(LS_KEY, lastRaw); }catch(e){}
 }
 function thread(code){
@@ -1731,7 +2526,7 @@ function unreadOf(code){
 }
 function visibleCodes(){
   if(side === 'staff') return [myStation];
-  return Object.keys(store.threads).filter(function(c){ return store.threads[c].messages.length; }).sort(function(a, b){ return lastTs(b) - lastTs(a); });
+  return Object.keys(store.threads).filter(function(c){ return store.threads[c].messages.length && byCode[c]; }).sort(function(a, b){ return lastTs(b) - lastTs(a); });
 }
 function lastTs(code){ var t = store.threads[code]; return t && t.messages.length ? t.messages[t.messages.length - 1].ts : 0; }
 function totalUnread(){ return visibleCodes().reduce(function(s, c){ return s + unreadOf(c); }, 0); }
@@ -1745,16 +2540,27 @@ function subOf(code){
 }
 function avCode(code){ return side === 'staff' ? 'OFFICER' : code; }
 
+function msgName(from, code){
+  return from === 'staff' ? (byCode[code] ? byCode[code].name : code) : (from === 'officer' ? 'เจ้าหน้าที่ GECC' : 'ระบบ GECC');
+}
 function pushMessage(code, from, text){
-  store = loadStore();
+  if(!DBON) store = loadStore();
   var t = thread(code);
   var last = t.messages.length ? t.messages[t.messages.length - 1].ts : 0;
   var ts = Math.max(Date.now(), last + 1);
-  t.messages.push({ id:'m' + ts + Math.floor(Math.random() * 1000), from:from,
-    name: from === 'staff' ? (byCode[code] ? byCode[code].name : code) : (from === 'officer' ? 'เจ้าหน้าที่ GECC' : 'ระบบ GECC'),
-    text:text, ts:ts });
+  var id = DBON ? window.GeccDB.uuid() : 'm' + ts + Math.floor(Math.random() * 1000);
+  t.messages.push({ id:id, from:from, name:msgName(from, code), text:text, ts:ts });
   if(from === side) t[readKey] = ts;
-  saveStore();
+  if(DBON){
+    window.GeccDB.chatSend({ id:id, station_code:code, sender_role:from, text:text }).catch(function(e){
+      t.messages = t.messages.filter(function(m){ return m.id !== id; });
+      renderAll();
+      alert('ส่งข้อความไม่สำเร็จ: ' + (e && e.message || e));
+    });
+    if(from === side) window.GeccDB.chatRead(code, side, new Date(ts).toISOString()).catch(function(){});
+  }else{
+    saveStore();
+  }
 }
 
 /* ---------- UI state ---------- */
@@ -1876,6 +2682,7 @@ if(side === 'staff'){
 }else{
   elLSub.textContent = 'ค้นหาและสนทนากับนายสถานีได้ทุกสถานี';
 }
+if(DBON){ var mbtn = root.querySelector('.gc-ibtn[data-act="menu"]'); if(mbtn) mbtn.style.display = 'none'; }
 var baseTitle = document.title;
 
 /* ---------- Rendering ---------- */
@@ -2024,7 +2831,8 @@ function markRead(code, silent){
   var last = t.messages[t.messages.length - 1].ts;
   if((t[readKey] || 0) < last){
     t[readKey] = last;
-    saveStore();
+    if(DBON) window.GeccDB.chatRead(code, side, new Date(last).toISOString()).catch(function(){});
+    else saveStore();
     renderLauncher();
     if(ui.list) renderListBody();
     var w = ui.wins.filter(function(x){ return x.code === code; })[0];
@@ -2130,17 +2938,44 @@ document.addEventListener('click', function(ev){
 document.addEventListener('visibilitychange', function(){ if(document.visibilityState === 'visible') renderAll(); });
 
 /* ---------- Live sync (other tabs / windows of this browser) ---------- */
-window.addEventListener('storage', function(ev){
-  if(ev.key === LS_KEY){ store = loadStore(); try{ lastRaw = localStorage.getItem(LS_KEY) || ''; }catch(e){} renderAll(); }
-});
-setInterval(function(){
-  var raw = ''; try{ raw = localStorage.getItem(LS_KEY) || ''; }catch(e){}
-  if(raw && raw !== lastRaw){ lastRaw = raw; store = loadStore(); renderAll(); }
-  else renderLauncher();
-}, 2000);
+function addRemote(r){
+  var t = thread(r.station_code);
+  var ts = Date.parse(r.created_at) || Date.now();
+  var ex = t.messages.filter(function(m){ return m.id === r.id; })[0];
+  if(ex){ ex.ts = ts; ex.from = r.sender_role; }
+  else t.messages.push({ id:r.id, from:r.sender_role, name:msgName(r.sender_role, r.station_code), text:r.text, ts:ts });
+  t.messages.sort(function(a, b){ return a.ts - b.ts; });
+}
+function setRead(r){
+  var t = thread(r.station_code), ts = Date.parse(r.read_at) || 0;
+  var k = r.side === 'staff' ? 'readStaff' : 'readOfficer';
+  if(ts > (t[k] || 0)) t[k] = ts;
+}
+if(DBON){
+  (async function(){
+    try{ await window.GeccDB.ready; }catch(e){}
+    try{
+      var d = await window.GeccDB.chatLoad();
+      d.messages.forEach(addRemote);
+      d.reads.forEach(setRead);
+      renderAll();
+      window.GeccDB.chatSubscribe(function(r){ addRemote(r); renderAll(); }, function(r){ setRead(r); renderAll(); });
+    }catch(e){ if(window.console) console.warn('chat load failed', e); }
+  })();
+  setInterval(renderLauncher, 20000);
+}else{
+  window.addEventListener('storage', function(ev){
+    if(ev.key === LS_KEY){ store = loadStore(); try{ lastRaw = localStorage.getItem(LS_KEY) || ''; }catch(e){} renderAll(); }
+  });
+  setInterval(function(){
+    var raw = ''; try{ raw = localStorage.getItem(LS_KEY) || ''; }catch(e){}
+    if(raw && raw !== lastRaw){ lastRaw = raw; store = loadStore(); renderAll(); }
+    else renderLauncher();
+  }, 2000);
+}
 
 /* ---------- Public helpers (handy for testing / later server hookup) ---------- */
-window.geccChat = { open:openConversation, stations:STATIONS, send:function(code, from, text){ pushMessage(code, from, text); renderAll(); }, reset:function(){ store = seed(); saveStore(); renderAll(); } };
+window.geccChat = { open:openConversation, stations:STATIONS, send:function(code, from, text){ pushMessage(code, from, text); renderAll(); }, reset:function(){ if(DBON) return; store = seed(); saveStore(); renderAll(); } };
 
 renderAll();
 })();

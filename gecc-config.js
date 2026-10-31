@@ -5,6 +5,6 @@
 //  ดูวิธีหาค่าได้ในไฟล์ "คู่มือติดตั้งฐานข้อมูลกลาง.md"
 // ===================================================================
 window.GECC_CONFIG = {
-supabaseUrl: 'https://jntnabjerflzvbqjanmj.supabase.co',      
-supabaseKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpudG5hYmplcmZsenZicWphbm1qIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTMzMDczNjcsImV4cCI6MjEwODg4MzM2N30.6f4V7zmyJlrF4FMg6rtxzOvG6DZQIHrV8G7gLnNKQqQ'    
+supabaseUrl:'https://wolmzbffnhuujlsmjkxw.supabase.co',      
+supabaseKey:'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndvbG16YmZmbmh1dWpsc21qa3h3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTM0NDA2MjEsImV4cCI6MjEwOTAxNjYyMX0.JKCxb22b8AP0soF9gQVTLwGEZSaZHD5sk2vmcUNXk7M'    
 };

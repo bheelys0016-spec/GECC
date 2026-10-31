@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ตรวจสอบการเชื่อมต่อฐานข้อมูลกลาง · Smart Rail GECC</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{ --ink:#111327; --good:#10B981; --bad:#EF4444; --warn:#E08E00; --line:#E3E5F0; --dim:#676B85; }
+  *{ box-sizing:border-box; }
+  body{ margin:0; background:#F0F1F7; font-family:'Noto Sans Thai',sans-serif; color:var(--ink); line-height:1.6; }
+  .wrap{ max-width:860px; margin:0 auto; padding:28px 18px 60px; }
+  h1{ font-size:22px; margin:0 0 4px; }
+  .sub{ color:var(--dim); font-size:13.5px; margin:0 0 20px; }
+  .card{ background:#fff; border:1px solid var(--line); border-radius:14px; padding:16px 18px; margin-bottom:14px; }
+  .card h2{ font-size:15px; margin:0 0 10px; }
+  .step{ display:flex; gap:12px; padding:10px 0; border-top:1px solid var(--line); }
+  .step:first-of-type{ border-top:none; }
+  .ic{ flex:none; width:26px; height:26px; border-radius:50%; display:flex; align-items:center; justify-content:center; color:#fff; font-size:14px; font-weight:700; background:#bbb; }
+  .ic.ok{ background:var(--good); } .ic.bad{ background:var(--bad); } .ic.warn{ background:var(--warn); } .ic.run{ background:#6c7bd9; }
+  .st-t{ font-weight:600; font-size:14.5px; }
+  .st-d{ font-size:13px; color:var(--dim); word-break:break-word; }
+  .st-h{ font-size:13px; margin-top:3px; padding:6px 10px; border-radius:8px; background:#FFF6E5; border:1px solid #F3D9A4; color:#7a4d00; }
+  .st-h.bad{ background:#FEECEC; border-color:#F5B5B5; color:#8f1d1d; }
+  input{ font-family:inherit; font-size:14px; padding:9px 12px; border:1px solid #D7D9EA; border-radius:10px; width:100%; max-width:280px; }
+  button{ font-family:inherit; font-size:13.5px; font-weight:600; padding:9px 16px; border-radius:20px; border:none; background:linear-gradient(135deg,#111327,#2E3358); color:#fff; cursor:pointer; }
+  button.light{ background:#fff; color:var(--ink); border:1px solid #D7D9EA; }
+  button:disabled{ opacity:.5; cursor:default; }
+  .row{ display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end; margin-bottom:10px; }
+  .row label{ display:block; font-size:12px; color:var(--dim); margin-bottom:3px; }
+  textarea{ width:100%; min-height:150px; font-family:ui-monospace,Menlo,monospace; font-size:12px; border:1px solid #D7D9EA; border-radius:10px; padding:10px; }
+  .banner{ padding:12px 16px; border-radius:12px; font-weight:600; margin-bottom:14px; }
+  .banner.ok{ background:#E7F8F1; color:#0b6b4a; border:1px solid #9fdcc3; }
+  .banner.bad{ background:#FEECEC; color:#8f1d1d; border:1px solid #f5b5b5; }
+  .banner.warn{ background:#FFF6E5; color:#7a4d00; border:1px solid #F3D9A4; }
+  a{ color:#1a56a0; }
+</style>
+<script>document.write('<script src="gecc-config.js?t=' + Date.now() + '"><\/script>')</script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script>window.supabase || document.write('<script src="https://unpkg.com/@supabase/supabase-js@2/dist/umd/supabase.js"><\/script>')</script>
+</head>
+<body>
+<div class="wrap">
+  <h1>ตรวจสอบการเชื่อมต่อฐานข้อมูลกลาง</h1>
+  <p class="sub">หน้านี้ทดสอบทีละขั้นว่าทำไมข้อมูลไม่ซิงค์ข้ามเครื่อง และบอกวิธีแก้เป็นภาษาไทย · <a href="index.html">กลับหน้าเข้าสู่ระบบ</a></p>
+
+  <div id="banner"></div>
+
+  <div class="card"><h2>ส่วนที่ 1 — ตรวจอัตโนมัติ (ไม่ต้องล็อกอิน)</h2><div id="steps1"></div></div>
+
+  <div class="card">
+    <h2>ส่วนที่ 2 — ทดสอบล็อกอินและการอัปโหลดจริง</h2>
+    <div class="row">
+      <div><label for="u">รหัสผู้ใช้ (เช่น BKK-004 หรือ G-10-458821)</label><input id="u" autocomplete="username"></div>
+      <div><label for="p">รหัสผ่าน</label><input id="p" type="password" autocomplete="current-password"></div>
+      <button id="go" onclick="runLogin()">ล็อกอินและทดสอบ</button>
+    </div>
+    <div id="steps2"></div>
+  </div>
+
+  <div class="card">
+    <h2>ผลการตรวจ (คัดลอกส่งให้ผู้ช่วยได้)</h2>
+    <textarea id="report" readonly></textarea>
+    <div style="margin-top:8px"><button class="light" onclick="copyReport()">คัดลอกผลตรวจ</button> <span id="copied" style="font-size:12px;color:var(--good)"></span></div>
+  </div>
+</div>
+
+<script>
+var LOG = [];
+var cfg = window.GECC_CONFIG || null;
+var sb = null, me = null;
+
+function esc(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){ return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]; }); }
+function add(box, title, status, detail, hint){
+  LOG.push('[' + (status === 'ok' ? 'ผ่าน' : status === 'bad' ? 'ไม่ผ่าน' : status === 'warn' ? 'เตือน' : '...') + '] ' + title + (detail ? ' — ' + detail : '') + (hint ? '\n      แนวทางแก้: ' + hint : ''));
+  var el = document.createElement('div'); el.className = 'step';
+  el.innerHTML = '<div class="ic ' + status + '">' + (status === 'ok' ? '✓' : status === 'bad' ? '✕' : status === 'warn' ? '!' : '…') + '</div><div><div class="st-t">' + esc(title) + '</div>' +
+    (detail ? '<div class="st-d">' + esc(detail) + '</div>' : '') + (hint ? '<div class="st-h ' + (status === 'bad' ? 'bad' : '') + '">' + hint + '</div>' : '') + '</div>';
+  document.getElementById(box).appendChild(el);
+  document.getElementById('report').value = LOG.join('\n');
+  return status;
+}
+function explain(e){
+  var m = String(e && (e.message || e.error_description || e) || '');
+  var code = e && (e.code || e.status) || '';
+  if(/Failed to fetch|NetworkError|Load failed/i.test(m)) return 'เชื่อมต่อ Supabase ไม่ได้ — ตรวจ URL, อินเทอร์เน็ต หรือโปรเจกต์อาจถูกพัก (เข้า Dashboard แล้วกด Restore)';
+  if(/Invalid API key|invalid.*jwt|apikey/i.test(m)) return 'คีย์ (supabaseKey) ไม่ถูกต้อง — คัดลอก anon public key ใหม่ให้ครบทั้งบรรทัด';
+  if(code === 'PGRST205' || /Could not find the table|does not exist|schema cache/i.test(m)) return 'ยังไม่มีตารางนี้ — ยังไม่ได้รันไฟล์ supabase-setup.sql (หรือรันแล้วเกิด error กลางทาง)';
+  if(/Bucket not found/i.test(m)) return 'ยังไม่มีที่เก็บรูป gecc-files — ยังไม่ได้รันไฟล์ supabase-setup.sql';
+  if(/row-level security|permission denied|violates/i.test(m)) return 'ไม่มีสิทธิ์ (RLS) — บัญชียังไม่ได้ผูกสิทธิ์ในตาราง profiles (ให้รัน supabase-setup.sql ซ้ำหลังสร้างผู้ใช้) หรือรหัสสถานีไม่ตรงกับบัญชี';
+  if(/Invalid login credentials/i.test(m)) return 'ล็อกอินไม่ผ่าน — รหัสผ่านผิด หรืออีเมลของผู้ใช้ใน Authentication ไม่ตรงรูปแบบ (ต้องเป็น รหัสผู้ใช้ตัวพิมพ์เล็ก@gecc.app) หรือไม่ได้ติ๊ก Auto Confirm User';
+  if(/Email not confirmed/i.test(m)) return 'ผู้ใช้ยังไม่ confirm — ใน Authentication → Users ให้กดที่ผู้ใช้แล้วเลือก Confirm user หรือสร้างใหม่โดยติ๊ก Auto Confirm User';
+  return null;
+}
+function b64json(s){ try{ return JSON.parse(decodeURIComponent(escape(atob(s.replace(/-/g, '+').replace(/_/g, '/'))))); }catch(e){ return null; } }
+
+async function part1(){
+  var ok = true;
+  // 1 config file
+  if(!cfg){
+    add('steps1', '1) ไฟล์ gecc-config.js', 'bad', 'โหลดไม่สำเร็จ (ไม่พบไฟล์)', 'ต้องอัปโหลดไฟล์ <b>gecc-config.js</b> ไว้โฟลเดอร์เดียวกับหน้าเว็บ ชื่อต้องตรงทุกตัวอักษร (ตัวพิมพ์เล็กทั้งหมด) แล้วกด Ctrl+F5');
+    return finish(false);
+  }
+  if(!cfg.supabaseUrl || !cfg.supabaseKey){
+    add('steps1', '1) ไฟล์ gecc-config.js', 'bad', 'พบไฟล์แล้ว แต่ supabaseUrl หรือ supabaseKey ยังว่าง', 'เปิด gecc-config.js ใส่ค่า Project URL และ anon public key (ดูขั้นตอนที่ 5 ในคู่มือ) แล้วอัปโหลดทับไฟล์เดิมบน GitHub — <b>ตอนนี้เว็บยังทำงานแบบเก็บในเครื่องนี้ จึงไม่ซิงค์ข้ามเครื่อง</b>');
+    return finish(false);
+  }
+  var url = String(cfg.supabaseUrl).trim().replace(/\/+$/, '');
+  var key = String(cfg.supabaseKey).trim();
+  var urlOk = /^https:\/\/[a-z0-9]+\.supabase\.co$/.test(url);
+  add('steps1', '1) ไฟล์ gecc-config.js', urlOk ? 'ok' : 'warn', 'URL = ' + url, urlOk ? '' : 'รูปแบบ URL ไม่เหมือนปกติ (ควรเป็น https://xxxxxxxx.supabase.co) ตรวจว่าไม่มีช่องว่างหรือตัวอักษรเกิน');
+  var jwt = key.indexOf('eyJ') === 0 ? b64json(key.split('.')[1] || '') : null;
+  if(jwt && jwt.role === 'service_role' || /^sb_secret_/.test(key)){
+    add('steps1', '   คีย์ที่ใส่', 'bad', 'นี่คือคีย์ลับ (service_role/secret)', '<b>อันตราย</b> ห้ามใส่ในเว็บ ให้ใช้ anon public key แทน และไปเปลี่ยนคีย์ลับใน Supabase ทันที (Project Settings → API)');
+    ok = false;
+  }else if((jwt && jwt.role === 'anon') || /^sb_publishable_/.test(key)){
+    add('steps1', '   คีย์ที่ใส่', 'ok', jwt ? 'anon public key' : 'publishable key');
+  }else{
+    add('steps1', '   คีย์ที่ใส่', 'warn', 'ไม่แน่ใจว่าเป็นคีย์ชนิดไหน (ความยาว ' + key.length + ' ตัวอักษร)', 'ตรวจว่าคัดลอกค่า anon public key มาครบทั้งบรรทัด');
+  }
+  // 2 library
+  if(!(window.supabase && window.supabase.createClient)){
+    add('steps1', '2) ไลบรารี Supabase', 'bad', 'โหลดไม่สำเร็จ', 'เครือข่ายอาจบล็อก cdn.jsdelivr.net / unpkg.com หรือปิดโดยโปรแกรมบล็อกโฆษณา ลองเปิดจากเครือข่ายอื่น/ปิดตัวบล็อกแล้ว Ctrl+F5');
+    return finish(false);
+  }
+  add('steps1', '2) ไลบรารี Supabase', 'ok', 'โหลดสำเร็จ');
+  sb = window.supabase.createClient(url, key, { auth:{ persistSession:true, autoRefreshToken:true } });
+  // 3 reachable
+  try{
+    var r = await fetch(url + '/auth/v1/health', { headers:{ apikey:key } });
+    if(r.ok) add('steps1', '3) เชื่อมต่อเซิร์ฟเวอร์ Supabase', 'ok', 'ตอบกลับ HTTP ' + r.status);
+    else{ add('steps1', '3) เชื่อมต่อเซิร์ฟเวอร์ Supabase', 'bad', 'ตอบกลับ HTTP ' + r.status, r.status === 401 ? 'คีย์ไม่ถูกต้อง — คัดลอก anon public key ใหม่' : 'ตรวจ URL หรือโปรเจกต์ถูกพัก (Paused) ให้เข้า Dashboard กด Restore'); ok = false; }
+  }catch(e){
+    add('steps1', '3) เชื่อมต่อเซิร์ฟเวอร์ Supabase', 'bad', String(e && e.message || e), explain(e) || 'ตรวจ URL ให้ตรงกับ Project URL และตรวจอินเทอร์เน็ต'); ok = false;
+  }
+  // 4 tables
+  var tables = ['profiles', 'station_photos', 'audit_items', 'audit_images', 'audit_meta', 'chat_messages', 'chat_reads'];
+  var missing = [], other = [];
+  for(var i = 0; i < tables.length; i++){
+    try{
+      var q = await sb.from(tables[i]).select('*').limit(1);
+      if(q.error){ var ex = explain(q.error); if(/ยังไม่มีตารางนี้/.test(ex || '')) missing.push(tables[i]); else other.push(tables[i] + ': ' + (q.error.message || '')); }
+    }catch(e){ other.push(tables[i] + ': ' + (e && e.message || e)); }
+  }
+  if(!missing.length && !other.length) add('steps1', '4) ตารางในฐานข้อมูล', 'ok', 'พบครบ ' + tables.length + ' ตาราง');
+  else{ add('steps1', '4) ตารางในฐานข้อมูล', 'bad', (missing.length ? 'ไม่พบตาราง: ' + missing.join(', ') : '') + (other.length ? ' | ' + other.join(' ; ') : ''), missing.length ? 'ยังไม่ได้รันไฟล์ <b>supabase-setup.sql</b> ใน SQL Editor (ต้องขึ้น Success) — รันทั้งไฟล์อีกครั้ง' : 'ดูข้อความ error ด้านบน'); ok = false; }
+  // 5 existing session
+  try{
+    var s = await sb.auth.getSession();
+    if(s.data && s.data.session){ add('steps1', '5) สถานะล็อกอินของเบราว์เซอร์นี้', 'ok', 'ล็อกอินอยู่ (user id ' + String(s.data.session.user.id).slice(0, 8) + '…)'); await afterLogin(true); }
+    else add('steps1', '5) สถานะล็อกอินของเบราว์เซอร์นี้', 'warn', 'ยังไม่ได้ล็อกอิน', 'ล็อกอินที่หน้าแรกของเว็บ หรือทดสอบในส่วนที่ 2 ด้านล่าง');
+  }catch(e){ add('steps1', '5) สถานะล็อกอิน', 'warn', String(e && e.message || e)); }
+  finish(ok);
+}
+
+function finish(ok){
+  var b = document.getElementById('banner');
+  if(ok === false){ b.innerHTML = '<div class="banner bad">✕ ยังเชื่อมต่อฐานข้อมูลกลางไม่ได้ — ดูข้อที่มีวงกลมสีแดงด้านล่าง ตอนนี้เว็บจึงเก็บข้อมูลในเครื่องนี้เท่านั้น (ไม่ซิงค์)</div>'; }
+  else b.innerHTML = '<div class="banner ok">✓ การเชื่อมต่อพื้นฐานผ่านแล้ว — ทดสอบล็อกอินและอัปโหลดในส่วนที่ 2 ต่อได้</div>';
+}
+
+async function afterLogin(silent){
+  var box = 'steps2';
+  var s = await sb.auth.getSession(); var uid = s.data && s.data.session && s.data.session.user.id;
+  if(!uid){ return; }
+  var p = await sb.from('profiles').select('*').eq('id', uid).maybeSingle();
+  if(p.error){ add(box, '6) อ่านสิทธิ์ผู้ใช้ (profiles)', 'bad', p.error.message, explain(p.error)); return; }
+  if(!p.data){ add(box, '6) อ่านสิทธิ์ผู้ใช้ (profiles)', 'bad', 'ไม่พบสิทธิ์ของบัญชีนี้', 'ผู้ใช้ถูกสร้างแล้วแต่ยังไม่ได้ผูกสิทธิ์ — ให้รัน <b>supabase-setup.sql</b> ซ้ำอีกครั้ง (ส่วนท้ายไฟล์) หรือเพิ่มบัญชีตามคู่มือหัวข้อ "เพิ่มบัญชีสถานีอื่น"'); return; }
+  me = p.data;
+  add(box, '6) อ่านสิทธิ์ผู้ใช้ (profiles)', 'ok', 'บทบาท = ' + (me.role === 'officer' ? 'เจ้าหน้าที่' : 'นายสถานี') + (me.station_code ? ' · สถานี ' + me.station_code : ''));
+  if(silent){ var btn = document.createElement('button'); btn.textContent = 'ทดสอบอัปโหลดรูป + แชทเรียลไทม์'; btn.onclick = function(){ btn.disabled = true; writeTests(); }; document.getElementById(box).appendChild(btn); return; }
+  await writeTests();
+}
+
+async function writeTests(){
+  var box = 'steps2', code = (me && me.role === 'staff' && me.station_code) ? me.station_code : '1001';
+  var png = Uint8Array.from(atob('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=='), function(c){ return c.charCodeAt(0); });
+  var blob = new Blob([png], { type:'image/png' });
+  var path = 'diagnostic/test-' + Date.now() + '.png', url = '';
+  var up = await sb.storage.from('gecc-files').upload(path, blob, { contentType:'image/png' });
+  if(up.error){ add(box, '7) อัปโหลดไฟล์ขึ้นที่เก็บรูป', 'bad', up.error.message, explain(up.error)); return; }
+  add(box, '7) อัปโหลดไฟล์ขึ้นที่เก็บรูป', 'ok', 'อัปโหลดสำเร็จ');
+  url = sb.storage.from('gecc-files').getPublicUrl(path).data.publicUrl;
+  try{ var f = await fetch(url); add(box, '8) เปิดดูรูปจากลิงก์สาธารณะ', f.ok ? 'ok' : 'bad', 'HTTP ' + f.status, f.ok ? '' : 'ที่เก็บรูปไม่เป็น Public — รัน supabase-setup.sql ใหม่ (ส่วนที่ 5)'); }
+  catch(e){ add(box, '8) เปิดดูรูปจากลิงก์สาธารณะ', 'bad', String(e && e.message || e), 'เปิดรูปจากลิงก์ไม่ได้ (เครือข่ายหรือ CORS)'); }
+  var ins = await sb.from('station_photos').insert({ station_code:code, name:'diagnostic.png', path:path, url:url }).select().single();
+  if(ins.error){ add(box, '9) บันทึกข้อมูลรูปลงตาราง station_photos', 'bad', ins.error.message, explain(ins.error)); }
+  else{
+    add(box, '9) บันทึกข้อมูลรูปลงตาราง station_photos', 'ok', 'เขียนและอ่านกลับได้ (สถานี ' + code + ')');
+    var del = await sb.from('station_photos').delete().eq('id', ins.data.id);
+    add(box, '10) ลบข้อมูลทดสอบ', del.error ? 'warn' : 'ok', del.error ? del.error.message : 'ลบแล้ว');
+  }
+  await sb.storage.from('gecc-files').remove([path]);
+  // realtime
+  var got = false, status = '';
+  var ch = sb.channel('diag-' + Date.now());
+  ch.on('postgres_changes', { event:'INSERT', schema:'public', table:'chat_messages' }, function(){ got = true; });
+  await new Promise(function(res){ ch.subscribe(function(st){ status = st; if(st === 'SUBSCRIBED' || st === 'CHANNEL_ERROR' || st === 'TIMED_OUT') res(); }); setTimeout(res, 7000); });
+  if(status !== 'SUBSCRIBED'){ add(box, '11) แชทเรียลไทม์ (Realtime)', 'bad', 'สถานะ: ' + (status || 'ไม่ตอบกลับ'), 'เชื่อมต่อ Realtime ไม่ได้ — ตรวจว่ารัน supabase-setup.sql ครบ (ส่วน "แชทแบบเรียลไทม์") และเครือข่ายไม่บล็อก WebSocket'); }
+  else if(me.role === 'officer'){
+    var id = (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : '00000000-0000-4000-8000-' + String(Date.now()).padStart(12, '0');
+    var m = await sb.from('chat_messages').insert({ id:id, station_code:'__diag__', sender_role:'officer', text:'diagnostic' });
+    if(m.error){ add(box, '11) แชทเรียลไทม์ (Realtime)', 'bad', m.error.message, explain(m.error)); }
+    else{
+      for(var i = 0; i < 40 && !got; i++) await new Promise(function(r){ setTimeout(r, 150); });
+      add(box, '11) แชทเรียลไทม์ (Realtime)', got ? 'ok' : 'bad', got ? 'ส่งข้อความและได้รับแบบเรียลไทม์' : 'ส่งข้อความได้ แต่ไม่ได้รับเหตุการณ์เรียลไทม์', got ? '' : 'ตาราง chat_messages ยังไม่ถูกเพิ่มใน Realtime — รัน supabase-setup.sql ซ้ำ หรือเปิดที่ Database → Replication');
+      await sb.from('chat_messages').delete().eq('id', id);
+    }
+  }else{
+    add(box, '11) แชทเรียลไทม์ (Realtime)', 'ok', 'เชื่อมต่อช่องเรียลไทม์ได้ (ทดสอบส่งข้อความจริงทำได้เมื่อล็อกอินเป็นเจ้าหน้าที่)');
+  }
+  sb.removeChannel(ch);
+  var b = document.getElementById('banner');
+  var bad = LOG.filter(function(x){ return x.indexOf('[ไม่ผ่าน]') === 0; }).length;
+  b.innerHTML = bad ? '<div class="banner bad">✕ ยังมี ' + bad + ' ข้อที่ไม่ผ่าน — ดูวงกลมสีแดงและแนวทางแก้ด้านล่าง</div>' : '<div class="banner ok">✓ ทุกขั้นตอนผ่านแล้ว — ฐานข้อมูลกลางพร้อมใช้งาน ลองล็อกอินที่หน้าแรกแล้วเพิ่มรูป/ส่งแชทจากสองเครื่อง</div>';
+}
+
+async function runLogin(){
+  if(!sb){ alert('ยังเชื่อมต่อฐานข้อมูลไม่ได้ ดูผลตรวจส่วนที่ 1 ก่อน'); return; }
+  var u = document.getElementById('u').value.trim().toLowerCase().replace(/\s+/g, ''), pw = document.getElementById('p').value;
+  document.getElementById('steps2').innerHTML = ''; var btn = document.getElementById('go'); btn.disabled = true;
+  var r = await sb.auth.signInWithPassword({ email:u + '@gecc.app', password:pw });
+  if(r.error){ add('steps2', '5.1) ล็อกอินด้วยอีเมล ' + u + '@gecc.app', 'bad', r.error.message, explain(r.error) || 'ตรวจรหัสผู้ใช้/รหัสผ่านและอีเมลของผู้ใช้ใน Authentication → Users'); btn.disabled = false; return; }
+  add('steps2', '5.1) ล็อกอินด้วยอีเมล ' + u + '@gecc.app', 'ok', 'ล็อกอินสำเร็จ');
+  await afterLogin(false);
+  btn.disabled = false;
+}
+
+function copyReport(){
+  var t = document.getElementById('report'); t.select();
+  try{ document.execCommand('copy'); document.getElementById('copied').textContent = 'คัดลอกแล้ว'; }catch(e){ document.getElementById('copied').textContent = 'กด Ctrl+C เพื่อคัดลอก'; }
+}
+LOG.push('GECC check · ' + new Date().toISOString() + ' · ' + location.href);
+part1();
+</script>
+</body>
+</html>
