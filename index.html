@@ -886,7 +886,7 @@ async function tryLogin(){
     const btn = document.getElementById('submit-btn');
     btn.disabled = true; const old = btn.textContent; btn.textContent = 'กำลังเข้าสู่ระบบ...';
     let r;
-    try{ r = await window.GeccDB.signIn(idVal, pwVal, currentRole === 'staff' ? 'staff' : 'officer'); }
+    try{ if(window.__geccPreSignOut) await window.__geccPreSignOut; r = await window.GeccDB.signIn(idVal, pwVal, currentRole === 'staff' ? 'staff' : 'officer'); }
     catch(e){ r = { ok:false, error:'network' }; }
     btn.disabled = false; btn.textContent = old;
     if(r.ok){
@@ -920,11 +920,9 @@ async function tryLogin(){
 // hide the demo credentials once a real database is connected
 if(window.GeccDB && window.GeccDB.enabled){
   const db = document.getElementById('demo-box'); if(db) db.style.display = 'none';
-  // already signed in? go straight to the right page
-  window.GeccDB.ready.then(function(m){ /* guard disabled on this page */ }).catch(function(){});
-  window.GeccDB.loadMe().then(function(m){
-    if(m && !m.noProfile){ window.GeccDB.syncLocal(m); window.location.replace((m.role === 'staff' ? 'gecc-station.html' : 'gecc-dashboard.html') + '?role=' + (m.role === 'staff' ? 'staff' : 'auditor')); }
-  }).catch(function(){});
+  // the login page always asks for credentials: end any previous session first (no automatic sign-in)
+  window.__geccPreSignOut = window.GeccDB.signOut();
+  window.addEventListener('pageshow', function(ev){ if(ev.persisted){ window.__geccPreSignOut = window.GeccDB.signOut(); } });
 }
 </script>
 
