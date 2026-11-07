@@ -210,6 +210,7 @@ async function writeTests(){
     add(box, '11) แชทเรียลไทม์ (Realtime)', 'ok', 'เชื่อมต่อช่องเรียลไทม์ได้ (ทดสอบส่งข้อความจริงทำได้เมื่อล็อกอินเป็นเจ้าหน้าที่)');
   }
   sb.removeChannel(ch);
+  if(me.role === 'officer') await accountTest();
   var b = document.getElementById('banner');
   var bad = LOG.filter(function(x){ return x.indexOf('[ไม่ผ่าน]') === 0; }).length;
   b.innerHTML = bad ? '<div class="banner bad">✕ ยังมี ' + bad + ' ข้อที่ไม่ผ่าน — ดูวงกลมสีแดงและแนวทางแก้ด้านล่าง</div>' : '<div class="banner ok">✓ ทุกขั้นตอนผ่านแล้ว — ฐานข้อมูลกลางพร้อมใช้งาน ลองล็อกอินที่หน้าแรกแล้วเพิ่มรูป/ส่งแชทจากสองเครื่อง</div>';
@@ -224,6 +225,24 @@ async function runLogin(){
   add('steps2', '5.1) ล็อกอินด้วยอีเมล ' + u + '@gecc.app', 'ok', 'ล็อกอินสำเร็จ');
   await afterLogin(false);
   btn.disabled = false;
+}
+
+
+async function accountTest(){
+  var box = 'steps2', un = 'DIAG' + Math.floor(Math.random() * 900000 + 100000), pw = 'Diag' + Math.random().toString(36).slice(2, 8) + '9';
+  var cr = await sb.rpc('admin_create_accounts', { items:[{ username:un, password:pw, display:'ทดสอบระบบ', role:'staff', station:'1001' }] });
+  if(cr.error){ add(box, '12) สร้างบัญชีสถานีจากหน้าเว็บ (ฟังก์ชัน admin)', 'bad', cr.error.message, explain(cr.error) || 'ยังไม่ได้รัน supabase-setup.sql ส่วน "จัดการบัญชีผู้ใช้" — รันไฟล์ใหม่ทั้งไฟล์อีกครั้ง'); return; }
+  var r0 = (cr.data || [])[0] || {};
+  if(!r0.ok){ add(box, '12) สร้างบัญชีสถานีจากหน้าเว็บ (ฟังก์ชัน admin)', 'bad', r0.error || 'ไม่ทราบสาเหตุ', 'ฐานข้อมูลปฏิเสธการสร้างบัญชี — ส่งผลตรวจนี้ให้ผู้ช่วย'); return; }
+  add(box, '12) สร้างบัญชีสถานีจากหน้าเว็บ (ฟังก์ชัน admin)', 'ok', 'สร้างบัญชีทดสอบ ' + un + ' สำเร็จ');
+  try{
+    var t = window.supabase.createClient(String(cfg.supabaseUrl).trim().replace(/\/+$/, ''), String(cfg.supabaseKey).trim(), { auth:{ persistSession:false, autoRefreshToken:false, detectSessionInUrl:false } });
+    var li = await t.auth.signInWithPassword({ email:un.toLowerCase() + '@gecc.app', password:pw });
+    if(li.error) add(box, '13) ล็อกอินด้วยบัญชีที่เพิ่งสร้างจากหน้าเว็บ', 'bad', li.error.message, 'บัญชีที่สร้างด้วยปุ่มในหน้า "ผู้ใช้" ยังล็อกอินไม่ได้ในโปรเจกต์นี้ — ให้ใช้วิธีสร้างผู้ใช้ผ่าน Dashboard (ดูคู่มือ) ไปก่อน แล้วส่งผลตรวจนี้ให้ผู้ช่วยแก้');
+    else{ add(box, '13) ล็อกอินด้วยบัญชีที่เพิ่งสร้างจากหน้าเว็บ', 'ok', 'ล็อกอินได้ — ระบบสร้างบัญชีให้ทุกสถานีใช้งานได้จริง'); try{ await t.auth.signOut(); }catch(e){} }
+  }catch(e){ add(box, '13) ล็อกอินด้วยบัญชีที่เพิ่งสร้างจากหน้าเว็บ', 'bad', String(e && e.message || e)); }
+  var pr = await sb.from('profiles').select('id').eq('username', un).maybeSingle();
+  if(pr.data){ var dl = await sb.rpc('admin_delete_account', { p_user:pr.data.id }); add(box, '14) ลบบัญชีทดสอบ', dl.error ? 'warn' : 'ok', dl.error ? dl.error.message : 'ลบแล้ว'); }
 }
 
 function copyReport(){

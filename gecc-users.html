@@ -200,6 +200,47 @@
     box-shadow: 0 14px 30px -10px rgba(17,19,39,0.6);
   }
 
+
+  /* ===== real accounts (central database) ===== */
+  .ac-head{ display:flex; justify-content:space-between; align-items:flex-start; gap:14px; flex-wrap:wrap; margin-bottom:14px; }
+  .ac-head h1{ font-size:24px; margin:0 0 4px; } .ac-head p{ margin:0; font-size:13px; color:var(--text-dim); }
+  .ac-btn{ font-family:var(--font-th); font-size:13px; font-weight:600; padding:9px 16px; border-radius:20px; border:none; background:linear-gradient(135deg, var(--ink), #2E3358); color:var(--cream); cursor:pointer; white-space:nowrap; }
+  .ac-btn.light{ background:var(--surface); color:var(--text-strong); border:1px solid var(--input-border); }
+  .ac-btn.danger{ background:var(--surface); color:var(--signal); border:1px solid var(--signal); }
+  .ac-btn.sm{ font-size:12px; padding:5px 12px; }
+  .ac-btn:disabled{ opacity:.5; cursor:default; }
+  .ac-card{ background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:16px 18px; margin-bottom:14px; }
+  .ac-kpis{ display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-bottom:14px; }
+  .ac-kpi{ background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:12px 16px; }
+  .ac-kpi .l{ font-size:12px; color:var(--text-dim); } .ac-kpi .v{ font-size:24px; font-weight:700; }
+  .ac-bulk{ display:flex; gap:14px; align-items:center; justify-content:space-between; flex-wrap:wrap; }
+  .ac-bulk .t{ font-weight:700; font-size:14px; } .ac-bulk .d{ font-size:12.5px; color:var(--text-dim); max-width:620px; }
+  .ac-bar{ height:7px; border-radius:6px; background:var(--divider); overflow:hidden; margin-top:10px; display:none; }
+  .ac-bar i{ display:block; height:100%; width:0; background:var(--good); transition:width .2s; }
+  .ac-form{ display:none; } .ac-form.open{ display:block; }
+  .ac-grid{ display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:10px; }
+  .ac-grid label{ display:block; font-size:11.5px; color:var(--text-dim); margin-bottom:4px; font-weight:600; }
+  .ac-in{ width:100%; font-family:var(--font-th); font-size:13px; padding:9px 11px; border:1px solid var(--input-border); border-radius:10px; background:var(--surface-alt); color:var(--text-strong); }
+  .ac-tools{ display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-bottom:12px; }
+  .ac-tools .ac-in{ max-width:300px; }
+  .ac-chip{ font-family:var(--font-th); font-size:12px; padding:5px 12px; border-radius:20px; border:1px solid var(--input-border); background:var(--surface); color:var(--text-dim); cursor:pointer; }
+  .ac-chip.active{ background:var(--ink); color:var(--cream); border-color:var(--ink); }
+  .ac-table{ width:100%; border-collapse:collapse; font-size:13px; }
+  .ac-table th{ text-align:left; font-size:11.5px; color:var(--text-dim); padding:8px 10px; border-bottom:1px solid var(--border); }
+  .ac-table td{ padding:9px 10px; border-bottom:1px solid var(--divider); vertical-align:middle; }
+  .ac-table .mono{ font-family:var(--font-mono); font-weight:600; }
+  .ac-pill{ font-size:11px; font-weight:600; padding:2px 10px; border-radius:20px; }
+  .ac-pill.staff{ background:rgba(16,185,129,.14); color:var(--good); } .ac-pill.officer{ background:rgba(255,176,32,.2); color:var(--amber-dim); }
+  .ac-pager{ display:flex; align-items:center; justify-content:space-between; gap:10px; margin-top:12px; font-size:12px; color:var(--text-dim); }
+  .ac-msg{ margin:0 0 14px; padding:12px 16px; border-radius:12px; font-size:13px; line-height:1.6; }
+  .ac-msg.ok{ background:rgba(16,185,129,.1); border:1px solid rgba(16,185,129,.4); color:var(--text-strong); }
+  .ac-msg.err{ background:rgba(239,68,68,.1); border:1px solid rgba(239,68,68,.4); color:var(--signal); }
+  .ac-msg.info{ background:var(--surface-alt); border:1px dashed var(--input-border); color:var(--text-dim); }
+  .ac-modal{ position:fixed; inset:0; background:rgba(10,11,22,.55); z-index:600; display:flex; align-items:center; justify-content:center; padding:20px; }
+  .ac-box{ background:var(--surface); border-radius:16px; padding:20px 22px; width:min(440px,100%); box-shadow:0 24px 60px rgba(0,0,0,.4); }
+  .ac-box h3{ margin:0 0 8px; font-size:16px; } .ac-box .row{ display:flex; gap:8px; margin-top:12px; flex-wrap:wrap; }
+  .ac-cred{ font-family:var(--font-mono); background:var(--surface-alt); border:1px solid var(--border); border-radius:10px; padding:10px 12px; margin:8px 0; font-size:13px; word-break:break-all; }
+  @media (max-width:760px){ .ac-kpis{ grid-template-columns:1fr 1fr; } .ac-grid{ grid-template-columns:1fr; } }
 </style>
 <!--GECC_BACKEND_START-->
 <script>document.write('<script src="gecc-config.js?t=' + Date.now() + '"><\/script>')</script>
@@ -422,29 +463,80 @@ GeccDB.chatSubscribe = function(onMsg, onRead){
 };
 
 
-/* ---------- connection chip (bottom-left): shows whether this browser is on the central database ---------- */
+/* ---------- accounts (officers manage station accounts via SQL functions) ---------- */
+GeccDB.listAccounts = async function(){
+  var r = await sb.from('profiles').select('id,username,display_name,role,station_code').order('username', { ascending:true }).limit(3000);
+  if(r.error) throw r.error;
+  return r.data || [];
+};
+GeccDB.createAccounts = async function(items){
+  var r = await sb.rpc('admin_create_accounts', { items:items });
+  if(r.error) throw r.error;
+  return r.data || [];
+};
+GeccDB.resetPassword = async function(id, password){
+  var r = await sb.rpc('admin_reset_password', { p_user:id, p_password:password });
+  if(r.error) throw r.error;
+};
+GeccDB.deleteAccount = async function(id){
+  var r = await sb.rpc('admin_delete_account', { p_user:id });
+  if(r.error) throw r.error;
+};
+GeccDB.changeMyPassword = async function(password){
+  var r = await sb.auth.updateUser({ password:password });
+  if(r.error) throw r.error;
+};
+
+/* ---------- connection chip (bottom-left) + account popover ---------- */
 function mountChip(){
   if(document.getElementById('gecc-db-chip')) return;
-  var el = document.createElement('a');
-  el.id = 'gecc-db-chip';
-  el.href = 'gecc-check.html';
-  el.title = 'คลิกเพื่อตรวจสอบการเชื่อมต่อฐานข้อมูลกลาง';
-  el.style.cssText = 'position:fixed;left:84px;bottom:24px;z-index:440;padding:5px 12px;border-radius:16px;font:600 11.5px/1.3 "Noto Sans Thai",Sarabun,sans-serif;text-decoration:none;box-shadow:0 4px 12px rgba(0,0,0,.25);white-space:nowrap;color:#fff;max-width:60vw;overflow:hidden;text-overflow:ellipsis;';
+  var css = document.createElement('style');
+  css.textContent = '#gecc-db-wrap{position:fixed;left:84px;bottom:24px;z-index:440;font-family:"Noto Sans Thai",Sarabun,sans-serif}' +
+    '#gecc-db-chip{display:inline-block;padding:5px 12px;border-radius:16px;font:600 11.5px/1.3 "Noto Sans Thai",Sarabun,sans-serif;box-shadow:0 4px 12px rgba(0,0,0,.25);white-space:nowrap;color:#fff;max-width:60vw;overflow:hidden;text-overflow:ellipsis;cursor:pointer;border:none}' +
+    '#gecc-db-pop{display:none;position:absolute;left:0;bottom:36px;width:290px;background:#fff;color:#111327;border-radius:12px;box-shadow:0 12px 30px rgba(0,0,0,.3);padding:12px 14px;font-size:12.5px;line-height:1.55}' +
+    '#gecc-db-pop.open{display:block}#gecc-db-pop .gp-h{font-weight:700;font-size:13px}#gecc-db-pop .gp-u{color:#676B85;margin:2px 0 8px}' +
+    '#gecc-db-pop input{width:100%;font:inherit;padding:7px 10px;border:1px solid #D7D9EA;border-radius:8px;margin:3px 0}' +
+    '#gecc-db-pop button,#gecc-db-pop a.gp-b{display:block;width:100%;text-align:center;font:600 12.5px "Noto Sans Thai",Sarabun,sans-serif;padding:7px 10px;border-radius:16px;border:1px solid #D7D9EA;background:#fff;color:#111327;cursor:pointer;margin-top:6px;text-decoration:none}' +
+    '#gecc-db-pop button.gp-pri{background:#111327;color:#fff;border-color:#111327}#gecc-db-pop .gp-msg{margin-top:5px;font-size:12px}';
+  document.head.appendChild(css);
+  var wrap = document.createElement('div'); wrap.id = 'gecc-db-wrap';
+  var chip = document.createElement('button'); chip.id = 'gecc-db-chip'; chip.type = 'button'; chip.title = 'สถานะการเชื่อมต่อฐานข้อมูลกลาง';
+  var pop = document.createElement('div'); pop.id = 'gecc-db-pop';
+  wrap.appendChild(pop); wrap.appendChild(chip); document.body.appendChild(wrap);
   function paint(){
-    if(enabled){
-      var m = GeccDB.me;
-      el.textContent = '☁ ฐานข้อมูลกลาง' + (m && m.name ? ' · ' + m.name : '');
-      el.style.background = '#10B981';
-    }else if(cfg.supabaseUrl){
-      el.textContent = '⚠ ฐานข้อมูลกลางไม่ทำงาน (คลิกตรวจสอบ)';
-      el.style.background = '#b42318';
-    }else{
-      el.textContent = '💾 โหมดเครื่องนี้ · ยังไม่ซิงค์ข้ามเครื่อง';
-      el.style.background = '#E08E00';
-    }
+    if(enabled){ var m = GeccDB.me; chip.textContent = '☁ ฐานข้อมูลกลาง' + (m && m.name ? ' · ' + m.name : ''); chip.style.background = '#10B981'; }
+    else if(cfg.supabaseUrl){ chip.textContent = '⚠ ฐานข้อมูลกลางไม่ทำงาน (คลิกดูสาเหตุ)'; chip.style.background = '#b42318'; }
+    else{ chip.textContent = '💾 โหมดเครื่องนี้ · ยังไม่ซิงค์ข้ามเครื่อง'; chip.style.background = '#E08E00'; }
   }
+  function draw(){
+    var m = GeccDB.me, h = '';
+    if(enabled && m){
+      h += '<div class="gp-h">☁ เชื่อมต่อฐานข้อมูลกลางแล้ว</div><div class="gp-u">' + (m.name || m.username || '') + ' · ' + (m.role === 'officer' ? 'เจ้าหน้าที่' : 'นายสถานี ' + (m.station || '')) + '</div>' +
+        '<div style="font-weight:600;margin-top:4px">เปลี่ยนรหัสผ่านของฉัน</div>' +
+        '<input id="gp-pw1" type="password" placeholder="รหัสผ่านใหม่ (อย่างน้อย 6 ตัว)" autocomplete="new-password"><input id="gp-pw2" type="password" placeholder="พิมพ์ซ้ำอีกครั้ง" autocomplete="new-password">' +
+        '<button class="gp-pri" id="gp-save" type="button">บันทึกรหัสผ่านใหม่</button><div class="gp-msg" id="gp-msg"></div>' +
+        '<a class="gp-b" href="gecc-check.html">ตรวจสอบการเชื่อมต่อ</a><button id="gp-out" type="button">ออกจากระบบ</button>';
+    }else if(cfg.supabaseUrl){
+      h += '<div class="gp-h">⚠ ฐานข้อมูลกลางไม่ทำงาน</div><div class="gp-u">ใส่ค่าใน gecc-config.js แล้ว แต่เชื่อมต่อไม่สำเร็จ</div><a class="gp-b" href="gecc-check.html">เปิดหน้าตรวจสอบการเชื่อมต่อ</a>';
+    }else{
+      h += '<div class="gp-h">💾 โหมดเครื่องนี้</div><div class="gp-u">ยังไม่ได้ใส่ค่าใน gecc-config.js ข้อมูลจึงเก็บในเบราว์เซอร์เครื่องนี้เท่านั้น ไม่ซิงค์ข้ามเครื่อง</div><a class="gp-b" href="gecc-check.html">ตรวจสอบการเชื่อมต่อ</a>';
+    }
+    pop.innerHTML = h;
+    var save = document.getElementById('gp-save'), out = document.getElementById('gp-out');
+    if(save) save.onclick = async function(){
+      var p1 = document.getElementById('gp-pw1').value, p2 = document.getElementById('gp-pw2').value, msg = document.getElementById('gp-msg');
+      if(p1.length < 6){ msg.style.color = '#b42318'; msg.textContent = 'รหัสผ่านต้องยาวอย่างน้อย 6 ตัวอักษร'; return; }
+      if(p1 !== p2){ msg.style.color = '#b42318'; msg.textContent = 'รหัสผ่านทั้งสองช่องไม่ตรงกัน'; return; }
+      save.disabled = true; msg.style.color = '#676B85'; msg.textContent = 'กำลังบันทึก...';
+      try{ await GeccDB.changeMyPassword(p1); msg.style.color = '#0b6b4a'; msg.textContent = '✓ เปลี่ยนรหัสผ่านแล้ว ใช้รหัสใหม่ในการล็อกอินครั้งถัดไป'; document.getElementById('gp-pw1').value = ''; document.getElementById('gp-pw2').value = ''; }
+      catch(e){ msg.style.color = '#b42318'; msg.textContent = 'เปลี่ยนรหัสผ่านไม่สำเร็จ: ' + (e && e.message || e); }
+      save.disabled = false;
+    };
+    if(out) out.onclick = function(){ GeccDB.signOut().then(function(){ location.href = 'index.html'; }); };
+  }
+  chip.onclick = function(ev){ ev.stopPropagation(); if(!pop.classList.contains('open')) draw(); pop.classList.toggle('open'); };
+  document.addEventListener('click', function(ev){ if(!wrap.contains(ev.target)) pop.classList.remove('open'); });
   paint();
-  document.body.appendChild(el);
   GeccDB.ready.then(paint, paint);
 }
 if(document.body) mountChip(); else document.addEventListener('DOMContentLoaded', mountChip);
@@ -863,6 +955,635 @@ document.addEventListener('keydown', function(e){
     closeSearch();
   }
 });
+</script>
+<script>
+// ===================== real accounts for every station (central database) =====================
+(function(){
+// stations from the SRT code book: [code, name, abbr TH, abbr EN]
+var ST_LIST = [
+["1001","กรุงเทพ","กท.","BKK"],
+["1004","สามเสน","สส.","SAM"],
+["1007","ชุมทางบางซื่อ","บซ.","BSJ"],
+["1000","สถานีกลางกรุงเทพอภิวัฒน์","กภ.","KTW"],
+["1011","บางเขน","บข.","BKH"],
+["1015","หลักสี่","ลส.","LKS"],
+["1017","ดอนเมือง","ดม.","DMU"],
+["1021","รังสิต","รต.","RSI"],
+["1022","เชียงราก","ชร.","CHR"],
+["1024","เชียงรากน้อย","ชน.","CRN"],
+["1026","คลองพุทรา","พซ.","KPS"],
+["1028","บางปะอิน","บอ.","BPI"],
+["1029","บ้านโพ","บพ.","BPH"],
+["1031","อยุธยา","อย.","AYY"],
+["1032","บ้านม้า","มา.","BAA"],
+["1033","มาบพระจันทร์","บจ.","MPC"],
+["1035","พระแก้ว","พก.","PHK"],
+["1036","ชุมทางบ้านภาชี","ภช.","BPJ"],
+["1037","หนองวิวัฒน์","วิ.","NGW"],
+["1039","ท่าเรือ","ทร.","THR"],
+["1041","บ้านหมอ","มอ.","BMO"],
+["1045","หนองโดน","โด.","NDO"],
+["1047","บ้านกลับ","บก.","BKP"],
+["1048","บ้านป่าหวาย","ปว.","BPW"],
+["1050","ลพบุรี","ลบ.","LBR"],
+["1051","ท่าแค","ทแ.","THK"],
+["1053","โคกกะเทียม","คท.","KKT"],
+["1055","หนองเต่า","นต.","NGT"],
+["1056","หนองทรายขาว","ซข.","NSK"],
+["1058","บ้านหมี่","บม.","BAM"],
+["1061","จันเสน","จส.","CHS"],
+["1063","ช่องแค","ชค.","CHK"],
+["1066","โพนทอง","โพ.","POT"],
+["1067","บ้านตาคลี","ตล.","BTK"],
+["1069","ดงมะกุ","ดง.","DMK"],
+["1070","หัวหวาย","หว.","HUW"],
+["1072","หนองโพ","นพ.","NGP"],
+["1074","หัวงิ้ว","หง.","HNG"],
+["1076","เนินมะกอก","มก.","NMA"],
+["1079","เขาทอง","ขท.","KTH"],
+["1082","นครสวรรค์","นว.","NKS"],
+["1083","ปากน้ำโพ","ปพ.","PNP"],
+["1226","บึงบอระเพ็ด","เพ.","BBP"],
+["1084","ทับกฤช","ทก.","TKT"],
+["1086","คลองปลากด","ปก.","KPK"],
+["1088","ชุมแสง","ชส.","CMS"],
+["1091","วังกร่าง","กา.","WAK"],
+["1093","บางมูลนาก","นา.","BMN"],
+["1095","หอไกร","ไก.","HOK"],
+["1097","ดงตะขบ","ดข.","DTK"],
+["1099","ตะพานหิน","ตห.","TPH"],
+["1101","ห้วยเกตุ","ยต.","HKE"],
+["1103","หัวดง","หด.","HUD"],
+["1105","วังกรด","วร.","WKT"],
+["1107","พิจิตร","พจ.","PIC"],
+["1109","ท่าฬ่อ","ทฬ.","THL"],
+["1111","บางกระทุ่ม","ทม.","BKT"],
+["1112","แม่เทียบ","แท.","MAT"],
+["1114","บ้านใหม่","บห.","BMA"],
+["1116","บึงพระ","บะ.","BUP"],
+["1118","พิษณุโลก","พล.","PSL"],
+["1119","บ้านเต็งหนาม","เห.","BTN"],
+["1121","บ้านตูม","ตม.","BTU"],
+["1122","แควน้อย","คน.","KWN"],
+["1125","พรหมพิราม","พห.","PPR"],
+["1127","หนองตม","หต.","NOO"],
+["1130","บ้านบุ่ง","บง.","BBU"],
+["1131","บ้านโคน","บค.","BKN"],
+["1134","พิชัย","พย.","PCH"],
+["1136","ไร่อ้อย","รอ.","ROI"],
+["1137","ชุมทางบ้านดารา","ดร.","BDJ"],
+["1144","ท่าสัก","าส.","THS"],
+["1146","ตรอน","ตอ.","TON"],
+["1148","วังกะพี้","วก.","WKP"],
+["1150","อุตรดิตถ์","อด.","UTD"],
+["1151","ศิลาอาสน์","ศล.","SLA"],
+["1154","บ้านด่าน","บด.","BDA"],
+["1157","ปางต้นผึ้ง","ปต.","PTP"],
+["1160","ห้วยไร่","หา.","HUR"],
+["1164","เด่นชัย","ดช.","DCH"],
+["1165","ปากปาน","ปา.","PPA"],
+["1167","แก่งหลวง","กล.","KAL"],
+["1172","บ้านปิน","บป.","BAP"],
+["1176","ผาคัน","ผน.","PKN"],
+["1180","ปางป๋วย","ปย.","PPU"],
+["1182","แม่จาง","มจ.","MCH"],
+["1184","แม่เมาะ","มม.","MAM"],
+["1187","ศาลาผาลาด","ผล.","SPL"],
+["1189","แม่ทะ","มท.","MTH"],
+["1192","หนองวัวเฒ่า","วถ.","NOW"],
+["1193","นครลำปาง","ลป.","NKL"],
+["1196","ห้างฉัตร","หฉ.","HGC"],
+["1198","ปางม่วง","ปม.","PAM"],
+["1201","แม่ตานน้อย","มต.","MTN"],
+["1204","ขุนตาน","ขน.","KHT"],
+["1206","ทาชมภู","าช.","TCP"],
+["1208","ศาลาแม่ทา","ลท.","SMT"],
+["1212","หนองหล่ม","งล.","NOL"],
+["1216","ลำพูน","ลพ.","LMP"],
+["1218","ป่าเส้า","ปส.","PSO"],
+["1220","สารภี","ภี.","SRP"],
+["1222","เชียงใหม่","ชม.","CGM"],
+["1139","คลองมะพลับ","มป.","KML"],
+["1143","สวรรคโลก","สว.","SWL"],
+["2001","หนองกวย","นก.","NKU"],
+["2002","หนองแซง","นซ.","NSE"],
+["2004","หนองสีดา","นด.","NOA"],
+["2005","บ้านป๊อกแป๊ก","ปป.","BPP"],
+["2007","สระบุรี","ะร.","SRR"],
+["2009","ชุมทางหนองบัว","นบ.","NBU"],
+["2011","ชุมทางแก่งคอย","กค.","KKJ"],
+["2082","มาบกะเบา","มบ.","MKB"],
+["2083","ผาเสด็จ","ผด.","PSD"],
+["2084","หินลับ","หล.","HIL"],
+["2086","มวกเหล็ก","มล.","MUL"],
+["2088","กลางดง","าง.","KDO"],
+["2089","ปางอโศก","โศ.","PAS"],
+["2091","บันไดม้า","ได.","BDM"],
+["2093","ปากช่อง","ปช.","PAC"],
+["2095","ซับม่วง","ซม.","SMU"],
+["2096","จันทึก","จท.","CNT"],
+["2097","คลองขนานจิตร","ขจ.","KKC"],
+["2100","คลองไผ่","คผ.","KPH"],
+["2101","ลาดบัวขาว","ลข.","LBK"],
+["2102","บ้านใหม่สำโรง","สำ.","BMS"],
+["2103","หนองน้ำขุ่น","นข.","NGK"],
+["2105","สีคิ้ว","สค.","SKI"],
+["2107","สูงเนิน","สน.","SNN"],
+["2109","กุดจิก","กจ.","KCK"],
+["2111","โคกกรวด","คก.","KKU"],
+["2113","ภูเขาลาด","ขล.","PKL"],
+["2114","นครราชสีมา","รส.","NRS"],
+["2115","ชุมทางถนนจิระ","จร.","TNJ"],
+["2211","บ้านพะเนา","พเ.","BPN"],
+["2213","ท่าช้าง","ชา.","TCH"],
+["2215","หนองมโนรมย์","มโ.","NOM"],
+["2217","จักราช","จช.","CKR"],
+["2220","บ้านหินโคน","หโ.","BHK"],
+["2222","หินดาษ","ดา.","HID"],
+["2224","ห้วยแถลง","ถล.","HTL"],
+["2227","หนองกระทิง","ทง.","NKT"],
+["2229","ลำปลายมาศ","ลำ.","LPM"],
+["2231","ทะเมนชัย","มช.","TMC"],
+["2233","บ้านแสลงพัน","งพ.","BSP"],
+["2234","บ้านหนองตาด","ตา.","BNT"],
+["2236","บุรีรัมย์","รย.","BRR"],
+["2239","ห้วยราช","หร.","HRA"],
+["2243","กระสัง","ะส.","KSG"],
+["2244","หนองเต็ง","เต.","NOE"],
+["2246","ลำชี","ลช.","LCH"],
+["2248","สุรินทร์","สร.","SUR"],
+["2250","บุฤาษี","บุ.","BRU"],
+["2252","เมืองที","อท.","MUT"],
+["2254","กะโดนค้อ","ดค.","KDK"],
+["2256","ศีขรภูมิ","รภ.","SKP"],
+["2258","บ้านกะลัน","ลน.","BKL"],
+["2261","สำโรงทาบ","สบ.","STP"],
+["2264","ห้วยทับทัน","ทท.","HTT"],
+["2267","อุทุมพรพิสัย","อุ.","UTP"],
+["2270","บ้านเนียม","บเ.","BNI"],
+["2273","ศรีสะเกษ","เก.","SSK"],
+["2277","หนองแวง","อว.","NNW"],
+["2279","บ้านคล้อ","าค.","BNK"],
+["2281","กันทรารมย์","าร.","KTR"],
+["2285","ห้วยขยุง","ขย.","HKY"],
+["2288","บุ่งหวาย","งห.","BWI"],
+["2290","อุบลราชธานี","อน.","UBR"],
+["2117","บ้านเกาะ","กะ.","BAK"],
+["2120","บ้านกระโดน","กโ.","BKD"],
+["2121","หนองแมว","นง.","NNM"],
+["2122","โนนสูง","นโ.","NSU"],
+["2124","บ้านดงพลอง","ดพ.","BDP"],
+["2126","บ้านมะค่า","มค.","BMK"],
+["2128","พลสงคราม","พค.","PSK"],
+["2129","บ้านดอนใหญ่","ดญ.","BDY"],
+["2131","เมืองคง","งค.","MUK"],
+["2133","โนนทองหลาง","นท.","NTL"],
+["2136","ชุมทางบัวใหญ่","วญ.","BYJ"],
+["2139","หนองบัวลาย","งบ.","NNB"],
+["2142","หนองมะเขือ","งอ.","NMK"],
+["2144","เมืองพล","อล.","MUP"],
+["2149","บ้านหัน","าห.","BHN"],
+["2152","บ้านไผ่","บผ.","PHI"],
+["2156","บ้านแฮด","ฮด.","BHT"],
+["2160","ท่าพระ","พะ.","TAP"],
+["2163","ขอนแก่น","ขอ.","KHK"],
+["2166","สำราญ","าญ.","SAR"],
+["2170","โนนพะยอม","พอ.","NPY"],
+["2172","น้ำพอง","อง.","NPO"],
+["2174","ห้วยเสียว","ยว.","HUS"],
+["2177","เขาสวนกวาง","สง.","KSK"],
+["2181","โนนสะอาด","โอ.","NSA"],
+["2183","ห้วยเกิ้ง","ยก.","HKG"],
+["2186","กุมภวาปี","วป.","KWP"],
+["2188","ห้วยสามพาด","หพ.","HSP"],
+["2190","หนองตะไก้","งต.","NNT"],
+["2194","หนองขอนกว้าง","ออ.","NKK"],
+["2195","อุดรธานี","รด.","UTN"],
+["2201","นาพู่","พู.","NPU"],
+["2207","นาทา","ยน.","NAA"],
+["2209","หนองคาย","นค.","NKI"],
+["2012","บ้านช่องใต้","ชต.","BCT"],
+["2017","หินซ้อน","หซ.","HIS"],
+["2020","แก่งเสือเต้น","แส.","KST"],
+["2024","โคกสลุง","คุ.","KSL"],
+["2026","สุรนารายณ์","ะน.","SNR"],
+["2033","ลำนารายณ์","ลา.","LNR"],
+["2038","แผ่นดินทอง","แง.","PDT"],
+["2042","โคกคลี","คี.","KKI"],
+["2045","ช่องสำราญ","อช.","CSR"],
+["2049","บ้านวะตะแบก (เทพสถิต)","แบ.","BWT"],
+["2052","ห้วยยายจิ๋ว","จย.","HYC"],
+["2057","บำเหน็จณรงค์","าจ.","BNN"],
+["2062","จัตุรัส","จต.","CTR"],
+["2066","หนองฉิม","ฉม.","NOC"],
+["2072","บ้านเหลื่อม","นเ.","BLM"],
+["2076","หนองพลวง","งว.","NNP"],
+["3001","มักกะสัน","มส.","MKS"],
+["3009","คลองตัน","คต.","KOT"],
+["3010","หัวหมาก","หม.","HUM"],
+["3012","บ้านทับช้าง","ทช.","BTC"],
+["3014","ลาดกระบัง","ะบ.","LKB"],
+["3015","หัวตะเข้","หข.","HTK"],
+["3017","คลองหลวงแพ่ง","คพ.","KLP"],
+["3019","คลองเปรง","คป.","PRE"],
+["3021","คลองบางพระ","คบ.","KBP"],
+["3023","ชุมทางฉะเชิงเทรา","ฉท.","CHJ"],
+["3055","บางน้ำเปรี้ยว","บย.","BGP"],
+["3057","ชุมทางคลองสิบเก้า","สเ.","KSI"],
+["3059","โยทะกา","ยท.","YTK"],
+["3061","บ้านสร้าง","สา.","BSA"],
+["3064","บ้านปากพลี","าป.","BPA"],
+["3066","ปราจีนบุรี","ปจ.","PCB"],
+["3068","โคกมะกอก","กอ.","KMK"],
+["3070","ประจันตคาม","จค.","PTK"],
+["3072","บ้านดงบัง","ดบ.","BDB"],
+["3075","กบินทร์บุรี","กบ.","KBB"],
+["3078","หนองสัง","อส.","NNS"],
+["3083","บ้านแก้ง","นแ.","BKE"],
+["3087","สระแก้ว","ะก.","SKA"],
+["3094","วัฒนานคร","วค.","WTN"],
+["3100","อรัญประเทศ","อร.","ARP"],
+["3130","ด่านพรมแดนบ้านคลองลึก","ลง.","BLK"],
+["3118","องครักษ์","อษ.","OKA"],
+["3120","วิหารแดง","วแ.","WHD"],
+["3121","บุใหญ่","ให.","BUY"],
+["3122","ชุมทางบ้านไผ่นาบุญ","บญ.","BPB"],
+["3026","ดอนสีนนท์","ดอ.","DSN"],
+["3029","พานทอง","งท.","PHT"],
+["3032","ชลบุรี","ชบ.","COB"],
+["3034","บางพระ","ระ.","PRA"],
+["3036","ชุมทางศรีราชา","ศช.","SRC"],
+["3039","บางละมุง","มุ.","BGL"],
+["3041","พัทยา","พา.","PTY"],
+["3043","บ้านห้วยขวาง","ยข.","BHW"],
+["3045","ชุมทางเขาชีจรรย์","ชจ.","KCC"],
+["3047","บ้านพลูตาหลวง","พต.","PTG"],
+["3048","อู่ตะเภา","อภ.","UTA"],
+["3049","จุกเสม็ด","จเ.","CAM"],
+["3110","บ้านฉาง","บฉ.","BNC"],
+["3115","มาบตาพุด","าพ.","MTP"],
+["3002","แม่น้ำ","มน.","MAN"],
+["4005","บางบำหรุ","บำ.","BGB"],
+["4004","ชุมทางตลิ่งชัน","ตช.","TCJ"],
+["4002","ธนบุรี","ธบ.","TBR"],
+["4008","ศาลาธรรมสพน์","ทพ.","STS"],
+["4009","ศาลายา","ลย.","SLY"],
+["4010","วัดสุวรรณ","สุ.","WSW"],
+["4012","วัดงิ้วราย","งร.","WRI"],
+["4013","นครชัยศรี","รช.","NCS"],
+["4014","ท่าแฉลบ","ฉล.","TCL"],
+["4015","ต้นสำโรง","โร.","TSR"],
+["4016","นครปฐม","คฐ.","NPT"],
+["4018","โพรงมะเดื่อ","พด.","PMD"],
+["4019","คลองบางตาล","บา.","KBT"],
+["4020","ชุมทางหนองปลาดุก","ปด.","NPJ"],
+["4079","บ้านโป่ง","โป.","BAG"],
+["4081","นครชุมน์","นช.","NCH"],
+["4082","คลองตาคด","ตค.","KTK"],
+["4083","โพธาราม","พร.","PTR"],
+["4085","เจ็ดเสมียน","จม.","CSM"],
+["4087","บ้านกล้วย","าก.","BKI"],
+["4089","ราชบุรี","รร.","RBR"],
+["4090","บ้านคูบัว","บบ.","BKB"],
+["4091","บ่อตะคร้อ","บร.","BOT"],
+["4093","ปากท่อ","ปท.","PTO"],
+["4095","บางเค็ม","งเ.","BGK"],
+["4097","เขาย้อย","เข.","KYO"],
+["4098","หนองปลาไหล","ปล.","NPL"],
+["4099","บางจาก","จก.","BGC"],
+["4101","เพชรบุรี","พบ.","PBR"],
+["4104","เขาทโมน","โม.","KTM"],
+["4105","หนองไม้เหลือง","นม.","NML"],
+["4107","หนองจอก","หจ.","NNC"],
+["4108","หนองศาลา","งา.","NOS"],
+["4111","ชะอำ","ชอ.","CHA"],
+["4114","ห้วยทรายเหนือ","ซน.","HSN"],
+["4115","ห้วยทรายใต้","ซใ.","HST"],
+["4118","หัวหิน","หห.","HHI"],
+["4119","หนองแก","นอ.","NKA"],
+["4120","สวนสนประดิพัทธ์","สป.","SSP"],
+["4121","เขาเต่า","ขต.","KTO"],
+["4123","วังก์พง","วพ.","WPO"],
+["4124","ปราณบุรี","ปน.","PAB"],
+["4126","หนองคาง","อค.","NKH"],
+["4128","สามร้อยยอด","สย.","SRY"],
+["4130","สามกระทาย","สท.","SKT"],
+["4133","กุยบุรี","กย.","KBR"],
+["4135","บ่อนอก","บน.","BON"],
+["4138","ทุ่งมะเม่า","มเ.","TMM"],
+["4140","คั่นกระได","กด.","KKD"],
+["4142","ประจวบคีรีขันธ์","จข.","PKK"],
+["4146","วังด้วน","วด.","WDN"],
+["4149","ห้วยยาง","หย.","HUY"],
+["4153","ทับสะแก","สก.","TSK"],
+["4158","บ้านกรูด","กร.","BUT"],
+["4161","นาผักขวง","ผข.","NPK"],
+["4163","บางสะพานใหญ่","พญ.","BSY"],
+["4165","ชะม่วง","ชว.","CMU"],
+["4167","บางสะพานน้อย","พน.","BSN"],
+["4169","ห้วยสัก","ยส.","HAS"],
+["4172","เขาไชยราช","ขช.","KCR"],
+["4175","มาบอำมฤต","มร.","MMR"],
+["4178","คลองวังช้าง","คช.","KWC"],
+["4179","ปะทิว","ะท.","PTI"],
+["4181","บ้านคอกม้า","คา.","BKM"],
+["4182","สะพลี","สี.","SPI"],
+["4184","นาชะอัง","ชง.","NCA"],
+["4186","ชุมพร","ชพ.","CUP"],
+["4187","แสงแดด","สด.","SDA"],
+["4189","ทุ่งคา","ทค.","TKA"],
+["4191","วิสัย","ไส.","WSI"],
+["4194","สวี","ะว.","SWI"],
+["4196","เขาสวนทุเรียน","ขร.","KSU"],
+["4199","ปากตะโก","ตก.","PAT"],
+["4201","ควนหินมุ้ย","มย.","KHM"],
+["4203","หลังสวน","งส.","LSU"],
+["4205","คลองขนาน","คข.","KKN"],
+["4208","ละแม","แม.","LMA"],
+["4210","บ้านดวด","ดว.","BDU"],
+["4212","คันธุลี","คล.","KTL"],
+["4213","ดอนธูป","ดธ.","DOT"],
+["4215","ท่าชนะ","นะ.","TCN"],
+["4218","เขาพนมแบก","ขบ.","KPN"],
+["4221","ไชยา","ชย.","CIY"],
+["4224","ท่าฉาง","ทฉ.","TAC"],
+["4226","คลองไทร","คไ.","KLS"],
+["4227","มะลวน","ลว.","MLU"],
+["4229","ชุมทางบ้านทุ่งโพธิ์","ทโ.","TPJ"],
+["4239","สุราษฎร์ธานี","รท.","SRN"],
+["4241","เขาหัวควาย","ขค.","KOH"],
+["4245","เขาพลู","ขพ.","KOP"],
+["4247","บ้านนา","นน.","BNA"],
+["4249","ห้วยมุด","มด.","HMU"],
+["4250","นาสาร","นส.","NSN"],
+["4253","พรุพี","พพ.","PUP"],
+["4255","บ้านส้อง","สอ.","BAS"],
+["4257","บ้านพรุกระแชง","แช.","BKC"],
+["4258","ห้วยปริก","หป.","HUP"],
+["4259","กระเบียด","เบ.","KBI"],
+["4261","ทานพอ","ทา.","TPO"],
+["4262","ฉวาง","ฉว.","CAW"],
+["4264","คลองจันดี","จด.","KCD"],
+["4266","หลักช้าง","หช.","LAC"],
+["4268","นาบอน","าอ.","NAB"],
+["4269","คลองจัง","คจ.","KOC"],
+["4270","ชุมทางทุ่งสง","ทส.","TSJ"],
+["4295","ใสใหญ่","สใ.","SYI"],
+["4297","ช่องเขา","ชข.","CKH"],
+["4299","ร่อนพิบูลย์","รบ.","ROP"],
+["4300","ชุมทางเขาชุมทอง","ชท.","KCJ"],
+["4310","ควนหนองคว้า","คว.","KNK"],
+["4312","บ้านตูล","ตน.","BAT"],
+["4315","ชะอวด","ชด.","CHU"],
+["4317","บ้านนางหลง","นล.","BNL"],
+["4318","บ้านขอนหาด","ขห.","BHH"],
+["4319","แหลมโตนด","โน.","LTN"],
+["4321","ปากคลอง","ปค.","PKH"],
+["4325","พัทลุง","พท.","PTL"],
+["4328","บ้านต้นโดน","บโ.","BTD"],
+["4330","เขาชัยสน","เช.","KCS"],
+["4331","บางแก้ว","แก.","BAE"],
+["4334","ควนเคี่ยม","คเ.","KUK"],
+["4336","หารเทา","หท.","HAT"],
+["4338","โคกทราย","โท.","KKS"],
+["4340","ควนเนียง","เน.","KNN"],
+["4342","บ้านเกาะใหญ่","กใ.","BYI"],
+["4344","บางกล่ำ","บล.","BGM"],
+["4345","บ้านดินลาน","ดล.","BDL"],
+["4347","ชุมทางหาดใหญ่","หใ.","HYJ"],
+["4377","นาม่วง","มง.","NMU"],
+["4381","วัดควนมีด","วม.","WKM"],
+["4384","จะนะ","จน.","CAN"],
+["4386","ท่าแมงลัก","งก.","TML"],
+["4388","เกาะสะบ้า","กส.","KSB"],
+["4391","เทพา","เท.","TPA"],
+["4393","ตาแปด","ตป.","TPE"],
+["4395","ปัตตานี","นี.","PTN"],
+["4397","นาประดู่","าด.","NPD"],
+["4437","วัดช้างให้","ชห.","WCH"],
+["4399","คลองทราย","คซ.","KOI"],
+["4400","ตาเซะ","ตซ.","TAS"],
+["4402","ยะลา","ยล.","YLA"],
+["4405","ไม้แก่น","ไม.","MIK"],
+["4408","รามัน","รั.","RMA"],
+["4409","บาลอ","าล.","BAL"],
+["4411","รือเสาะ","สะ.","RUS"],
+["4414","ลาโละ","ลล.","LLO"],
+["4416","มะรือโบ","โบ.","MRB"],
+["4419","ตันหยงมัส","ยม.","TYM"],
+["4421","ป่าไผ่","ปผ.","PAP"],
+["4423","เจาะไอร้อง","จอ.","CIR"],
+["4424","บูกิต","บู.","BUK"],
+["4427","โต๊ะเด็ง","ตด.","TOD"],
+["4428","สุไหงปาดี","งด.","SGP"],
+["4432","สุไหงโก-ลก","โล.","SGK"],
+["4368","คลองแงะ","คง.","KNG"],
+["4373","ปาดังเบซาร์ (ไทย)","ปซ.๒","PBT"],
+["4374","ปาดังเบซาร์","ปซ.","PBS"],
+["4042","สุพรรณบุรี","สพ.","SPB"],
+["4044","สระโกสินารายณ์","สโ.","SKS"],
+["4045","ลูกแก","ลแ.","LUK"],
+["4048","ท่าเรือน้อย","ทน.","TRN"],
+["4051","ท่าม่วง","าม.","TMG"],
+["4057","กาญจนบุรี","กญ.","KCB"],
+["4063","วังเย็น","วย.","WYN"],
+["4069","ท่ากิเลน","กน.","TKL"],
+["4073","วังโพ","วง.","WAP"],
+["4077","น้ำตก","าต.","NAT"],
+["4238","คีรีรัฐนิคม","รค.","KRR"],
+["4272","ที่วัง","ทว.","TWG"],
+["4281","ห้วยยอด","ยอ.","HYO"],
+["4289","ตรัง","ตร.","TRG"],
+["4294","กันตัง","กต.","KAT"],
+["4302","บ้านทุ่งหล่อ","ลอ.","BLO"],
+["4303","โคกคราม","คค.","KKA"],
+["4308","นครศรีธรรมราช","ธำ.","NST"],
+["5001","วงเวียนใหญ่","งญ.","WWY"],
+["5003","ตลาดพลู","ลู.","TLP"],
+["5008","วัดสิงห์","สิ.","WTS"],
+["5012","รางโพธิ์","รโ.","RPO"],
+["5018","มหาชัย","ชั.","MHC"],
+["5019","บ้านแหลม","แห.","BLA"],
+["5032","แม่กลอง","แอ.","MKO"]
+];
+var PAGE = 10;
+var ACCTS = [], roleF = 'all', q = '', pg = 0, lastCreds = null, bulkBusy = false;
+var root = document.createElement('div'); root.id = 'acct-root';
+function esc(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){ return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]; }); }
+function norm(s){ return String(s || '').toLowerCase().replace(/[\s\.\-_()·]/g, ''); }
+function stRow(code){ for(var i = 0; i < ST_LIST.length; i++){ if(ST_LIST[i][0] === code) return ST_LIST[i]; } return null; }
+function stFull(r){ return r[1].indexOf('สถานี') === 0 ? r[1] : 'สถานี' + r[1]; }
+function stLabel(r){ return r[0] + ' · ' + r[1] + ' · ' + r[2] + ' · ' + r[3]; }
+function genPw(){
+  var al = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789', out = '', b = new Uint8Array(8);
+  (window.crypto || window.msCrypto).getRandomValues(b);
+  for(var i = 0; i < 8; i++) out += al[b[i] % al.length];
+  return out;
+}
+function hasStation(code){ return ACCTS.some(function(a){ return a.role === 'staff' && a.station_code === code; }); }
+function missing(){ return ST_LIST.filter(function(r){ return !hasStation(r[0]); }); }
+function stationName(code){ var r = stRow(code); return r ? stFull(r) : (code || ''); }
+function filtered(){
+  var n = norm(q);
+  return ACCTS.filter(function(a){
+    if(roleF !== 'all' && a.role !== roleF) return false;
+    if(!n) return true;
+    return norm(a.username).indexOf(n) > -1 || norm(a.display_name).indexOf(n) > -1 || norm(a.station_code).indexOf(n) > -1 || norm(stationName(a.station_code)).indexOf(n) > -1;
+  });
+}
+function csvDownload(rows, name){
+  var head = ['รหัสผู้ใช้', 'รหัสสถานี', 'ชื่อสถานี', 'ชื่อย่อ', 'รหัสผ่านเริ่มต้น', 'สถานะ'];
+  var lines = [head].concat(rows.map(function(r){ return [r.username, r.station, r.name, r.abbr, r.password, r.ok ? 'สร้างสำเร็จ' : ('ไม่สำเร็จ: ' + (r.error || ''))]; }));
+  var txt = '\ufeff' + lines.map(function(l){ return l.map(function(x){ return '"' + String(x == null ? '' : x).replace(/"/g, '""') + '"'; }).join(','); }).join('\r\n');
+  var a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([txt], { type:'text/csv;charset=utf-8' })); a.download = name;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  setTimeout(function(){ URL.revokeObjectURL(a.href); }, 2000);
+}
+function modal(html){
+  var m = document.createElement('div'); m.className = 'ac-modal'; m.innerHTML = '<div class="ac-box">' + html + '</div>';
+  m.addEventListener('click', function(e){ if(e.target === m) m.remove(); });
+  document.body.appendChild(m); return m;
+}
+function render(){
+  var list = filtered(), pages = Math.max(1, Math.ceil(list.length / PAGE));
+  pg = Math.min(Math.max(0, pg), pages - 1);
+  var slice = list.slice(pg * PAGE, pg * PAGE + PAGE);
+  var staffN = ACCTS.filter(function(a){ return a.role === 'staff'; }).length;
+  var covered = ST_LIST.length - missing().length;
+  var miss = missing();
+  var h = '<div class="ac-head"><div><h1>บัญชีผู้ใช้ของแต่ละสถานี</h1><p>บัญชีจริงในฐานข้อมูลกลาง · นายสถานีเห็นและแก้ไขได้เฉพาะสถานีของตัวเอง เจ้าหน้าที่เห็นได้ทุกสถานี</p></div>' +
+    '<button class="ac-btn" onclick="ac.toggleForm()">+ เพิ่มบัญชี</button></div>';
+  h += '<div class="ac-kpis"><div class="ac-kpi"><div class="l">บัญชีทั้งหมด</div><div class="v">' + ACCTS.length + '</div></div>' +
+    '<div class="ac-kpi"><div class="l">บัญชีนายสถานี</div><div class="v">' + staffN + '</div></div>' +
+    '<div class="ac-kpi"><div class="l">สถานีที่มีบัญชีแล้ว</div><div class="v">' + covered + ' <small style="font-size:13px;color:var(--text-dim)">/ ' + ST_LIST.length + '</small></div></div>' +
+    '<div class="ac-kpi"><div class="l">บัญชีเจ้าหน้าที่</div><div class="v">' + ACCTS.filter(function(a){ return a.role === 'officer'; }).length + '</div></div></div>';
+  if(lastCreds){
+    h += '<div class="ac-msg ok"><b>' + esc(lastCreds.title) + '</b><br>' + lastCreds.text + '<div style="margin-top:8px">' +
+      (lastCreds.csv ? '<button class="ac-btn sm" onclick="ac.csv()">⬇ ดาวน์โหลดไฟล์รหัสผ่าน (CSV)</button> ' : '') + '<button class="ac-btn light sm" onclick="ac.dismiss()">ปิดข้อความนี้</button></div></div>';
+  }
+  h += '<div class="ac-card ac-bulk"><div><div class="t">สร้างบัญชีให้ทุกสถานีที่ยังไม่มี' + (miss.length ? ' (' + miss.length + ' สถานี)' : '') + '</div>' +
+    '<div class="d">' + (miss.length ? 'ระบบจะสร้างบัญชีนายสถานีให้ทีละสถานี โดย <b>รหัสผู้ใช้ = รหัสสถานี 4 หลัก</b> (เช่น 1001) และสุ่มรหัสผ่านเริ่มต้นให้แต่ละสถานี แล้วดาวน์โหลดเป็นไฟล์ CSV ให้อัตโนมัติ — <b>รหัสผ่านจะดูย้อนหลังไม่ได้</b> ต้องเก็บไฟล์ไว้แจกจ่าย (สถานีเปลี่ยนรหัสผ่านเองได้ที่ป้ายมุมซ้ายล่าง)' : 'ทุกสถานีมีบัญชีแล้ว') + '</div>' +
+    '<div class="ac-bar" id="ac-bar"><i id="ac-bar-i"></i></div></div>' +
+    '<button class="ac-btn" id="ac-bulk-btn" onclick="ac.bulk()"' + (miss.length ? '' : ' disabled') + '>สร้างบัญชีทั้งหมด</button></div>';
+  h += '<div class="ac-card ac-form" id="ac-form"><div class="ac-grid">' +
+    '<div><label>บทบาท</label><select class="ac-in" id="ac-role" onchange="ac.roleChange()"><option value="staff">นายสถานี</option><option value="officer">เจ้าหน้าที่</option></select></div>' +
+    '<div id="ac-st-wrap"><label>สถานี (พิมพ์ชื่อ / รหัส / ชื่อย่อ)</label><input class="ac-in" id="ac-st" list="ac-st-list" autocomplete="off" onchange="ac.pickStation()"><datalist id="ac-st-list">' + ST_LIST.map(function(r){ return '<option value="' + esc(stLabel(r)) + '"></option>'; }).join('') + '</datalist></div>' +
+    '<div><label>รหัสผู้ใช้ที่ใช้ล็อกอิน</label><input class="ac-in" id="ac-user" placeholder="เช่น 1001"></div>' +
+    '<div><label>ชื่อที่แสดง</label><input class="ac-in" id="ac-name" placeholder="เช่น นายสถานีกรุงเทพ"></div>' +
+    '<div><label>รหัสผ่านเริ่มต้น (อย่างน้อย 6 ตัว)</label><div style="display:flex;gap:6px"><input class="ac-in" id="ac-pw" value="' + genPw() + '"><button class="ac-btn light sm" type="button" onclick="document.getElementById(\'ac-pw\').value = ac.gen()">สุ่ม</button></div></div>' +
+    '</div><div style="display:flex;gap:8px"><button class="ac-btn" onclick="ac.create()">สร้างบัญชี</button><button class="ac-btn light" onclick="ac.toggleForm()">ยกเลิก</button></div></div>';
+  h += '<div class="ac-card"><div class="ac-tools"><input class="ac-in" id="ac-q" placeholder="ค้นหา รหัสผู้ใช้ / ชื่อ / รหัสสถานี / ชื่อสถานี" value="' + esc(q) + '" oninput="ac.search(this.value)">' +
+    ['all', 'staff', 'officer'].map(function(k){ return '<button class="ac-chip' + (roleF === k ? ' active' : '') + '" onclick="ac.role(\'' + k + '\')">' + (k === 'all' ? 'ทั้งหมด' : k === 'staff' ? 'นายสถานี' : 'เจ้าหน้าที่') + '</button>'; }).join('') + '</div>' +
+    '<table class="ac-table"><thead><tr><th>รหัสผู้ใช้</th><th>ชื่อที่แสดง</th><th>บทบาท</th><th>สถานี</th><th></th></tr></thead><tbody>' +
+    (slice.length ? slice.map(function(a){
+      return '<tr><td class="mono">' + esc(a.username) + '</td><td>' + esc(a.display_name || '') + '</td><td><span class="ac-pill ' + a.role + '">' + (a.role === 'officer' ? 'เจ้าหน้าที่' : 'นายสถานี') + '</span></td>' +
+        '<td>' + (a.station_code ? esc(a.station_code) + ' · ' + esc(stationName(a.station_code)) : '—') + '</td>' +
+        '<td style="text-align:right;white-space:nowrap"><button class="ac-btn light sm" onclick="ac.reset(\'' + a.id + '\')">รีเซ็ตรหัสผ่าน</button> <button class="ac-btn danger sm" onclick="ac.del(\'' + a.id + '\')">ลบ</button></td></tr>';
+    }).join('') : '<tr><td colspan="5" style="text-align:center;color:var(--text-faint);padding:22px">ไม่พบบัญชี</td></tr>') +
+    '</tbody></table><div class="ac-pager"><span>แสดง ' + (list.length ? pg * PAGE + 1 : 0) + '–' + Math.min(list.length, pg * PAGE + PAGE) + ' จาก ' + list.length + ' บัญชี</span>' +
+    '<span><button class="ac-btn light sm" onclick="ac.page(-1)"' + (pg <= 0 ? ' disabled' : '') + '>‹ ก่อนหน้า</button> หน้า ' + (pg + 1) + ' / ' + pages + ' <button class="ac-btn light sm" onclick="ac.page(1)"' + (pg >= pages - 1 ? ' disabled' : '') + '>ถัดไป ›</button></span></div></div>';
+  var keep = document.getElementById('ac-q'); var focus = keep && document.activeElement === keep, pos = focus ? keep.selectionStart : 0;
+  var formOpen = document.getElementById('ac-form') && document.getElementById('ac-form').classList.contains('open');
+  root.innerHTML = h;
+  if(formOpen) document.getElementById('ac-form').classList.add('open');
+  if(focus){ var nq = document.getElementById('ac-q'); nq.focus(); nq.setSelectionRange(pos, pos); }
+}
+async function reload(){
+  try{ ACCTS = await window.GeccDB.listAccounts(); }
+  catch(e){ root.innerHTML = '<div class="ac-msg err">โหลดรายชื่อบัญชีไม่สำเร็จ: ' + esc(e && e.message || e) + '</div>'; return; }
+  render();
+}
+window.ac = {
+  gen: genPw,
+  toggleForm: function(){ document.getElementById('ac-form').classList.toggle('open'); },
+  roleChange: function(){ var staff = document.getElementById('ac-role').value === 'staff'; document.getElementById('ac-st-wrap').style.display = staff ? '' : 'none'; },
+  pickStation: function(){
+    var v = document.getElementById('ac-st').value, m = v.match(/^(\d{4})\b/), r = m ? stRow(m[1]) : null;
+    if(!r){ var n = norm(v), c = ST_LIST.filter(function(x){ return [x[0], x[1], x[2], x[3]].some(function(k){ return norm(k) === n; }); }); if(c.length === 1) r = c[0]; }
+    if(!r) return;
+    document.getElementById('ac-st').value = stLabel(r); document.getElementById('ac-user').value = r[0]; document.getElementById('ac-name').value = 'นายสถานี' + r[1];
+  },
+  search: function(v){ q = v; pg = 0; render(); },
+  role: function(k){ roleF = k; pg = 0; render(); },
+  page: function(d){ pg += d; render(); },
+  dismiss: function(){ lastCreds = null; render(); },
+  csv: function(){ if(lastCreds && lastCreds.csv) csvDownload(lastCreds.csv, 'gecc-station-accounts-' + new Date().toISOString().slice(0, 10) + '.csv'); },
+  create: async function(){
+    var role = document.getElementById('ac-role').value, user = document.getElementById('ac-user').value.trim(), name = document.getElementById('ac-name').value.trim(), pw = document.getElementById('ac-pw').value;
+    var stCode = '';
+    if(role === 'staff'){ var m = document.getElementById('ac-st').value.match(/^(\d{4})\b/); stCode = m ? m[1] : ''; if(!stCode || !stRow(stCode)){ alert('กรุณาเลือกสถานีจากรายการ'); return; } }
+    if(!user){ alert('กรุณาระบุรหัสผู้ใช้'); return; }
+    if(pw.length < 6){ alert('รหัสผ่านต้องยาวอย่างน้อย 6 ตัวอักษร'); return; }
+    var res;
+    try{ res = await window.GeccDB.createAccounts([{ username:user, password:pw, display:name, role:role, station:stCode }]); }
+    catch(e){ alert('สร้างบัญชีไม่สำเร็จ: ' + (e && e.message || e)); return; }
+    var r0 = res[0] || {};
+    if(!r0.ok){ alert('สร้างบัญชีไม่สำเร็จ: ' + (r0.error || 'ไม่ทราบสาเหตุ')); return; }
+    lastCreds = { title:'สร้างบัญชีแล้ว — จดรหัสผ่านไว้ (ดูย้อนหลังไม่ได้)', text:'รหัสผู้ใช้ <b>' + esc(user.toUpperCase()) + '</b> · รหัสผ่าน <b style="font-family:var(--font-mono)">' + esc(pw) + '</b>', csv:[{ username:user.toUpperCase(), station:stCode, name:name, abbr:'', password:pw, ok:true }] };
+    await reload();
+  },
+  reset: function(id){
+    var a = ACCTS.filter(function(x){ return x.id === id; })[0]; if(!a) return;
+    var m = modal('<h3>รีเซ็ตรหัสผ่าน</h3><div style="font-size:13px;color:var(--text-dim)">บัญชี <b>' + esc(a.username) + '</b> · ' + esc(a.display_name || '') + '</div>' +
+      '<div class="ac-cred" style="margin-top:12px"><input class="ac-in" id="ac-rpw" value="' + genPw() + '"></div><div id="ac-rmsg" style="font-size:12.5px"></div>' +
+      '<div class="row"><button class="ac-btn light sm" id="ac-rgen">สุ่มใหม่</button><button class="ac-btn" id="ac-rsave">บันทึกรหัสผ่านใหม่</button><button class="ac-btn light" id="ac-rclose">ปิด</button></div>');
+    m.querySelector('#ac-rgen').onclick = function(){ m.querySelector('#ac-rpw').value = genPw(); };
+    m.querySelector('#ac-rclose').onclick = function(){ m.remove(); };
+    m.querySelector('#ac-rsave').onclick = async function(){
+      var pw = m.querySelector('#ac-rpw').value, msg = m.querySelector('#ac-rmsg');
+      if(pw.length < 6){ msg.style.color = 'var(--signal)'; msg.textContent = 'รหัสผ่านต้องยาวอย่างน้อย 6 ตัวอักษร'; return; }
+      try{ await window.GeccDB.resetPassword(id, pw); msg.style.color = 'var(--good)'; msg.innerHTML = '✓ เปลี่ยนแล้ว — รหัสผ่านใหม่ของ <b>' + esc(a.username) + '</b> คือ <b style="font-family:var(--font-mono)">' + esc(pw) + '</b> (จดไว้ ดูย้อนหลังไม่ได้)'; }
+      catch(e){ msg.style.color = 'var(--signal)'; msg.textContent = 'ไม่สำเร็จ: ' + (e && e.message || e); }
+    };
+  },
+  del: async function(id){
+    var a = ACCTS.filter(function(x){ return x.id === id; })[0]; if(!a) return;
+    if(!confirm('ลบบัญชี ' + a.username + ' (' + (a.display_name || '') + ') ถาวร?\nผู้ใช้นี้จะล็อกอินไม่ได้อีก')) return;
+    try{ await window.GeccDB.deleteAccount(id); }catch(e){ alert('ลบไม่สำเร็จ: ' + (e && e.message || e)); return; }
+    await reload();
+  },
+  bulk: async function(){
+    if(bulkBusy) return;
+    var todo = missing(); if(!todo.length) return;
+    if(!confirm('สร้างบัญชีนายสถานีให้ ' + todo.length + ' สถานี?\nรหัสผู้ใช้ = รหัสสถานี 4 หลัก และสุ่มรหัสผ่านให้แต่ละสถานี\nจะดาวน์โหลดไฟล์ CSV รหัสผ่านให้เมื่อเสร็จ (ดูย้อนหลังไม่ได้)')) return;
+    bulkBusy = true; document.getElementById('ac-bulk-btn').disabled = true;
+    var bar = document.getElementById('ac-bar'), fill = document.getElementById('ac-bar-i'); bar.style.display = 'block';
+    var out = [], BATCH = 25;
+    for(var i = 0; i < todo.length; i += BATCH){
+      var part = todo.slice(i, i + BATCH).map(function(r){ return { code:r[0], row:r, pw:genPw() }; });
+      var items = part.map(function(p){ return { username:p.code, password:p.pw, display:'นายสถานี' + p.row[1], role:'staff', station:p.code }; });
+      var res = null, err = '';
+      try{ res = await window.GeccDB.createAccounts(items); }catch(e){ err = e && e.message || String(e); }
+      part.forEach(function(p, k){
+        var rr = res && res[k];
+        out.push({ username:p.code, station:p.code, name:stFull(p.row), abbr:p.row[2] + ' / ' + p.row[3], password:p.pw, ok:!!(rr && rr.ok), error: rr ? rr.error : err });
+      });
+      fill.style.width = Math.round(Math.min(todo.length, i + BATCH) / todo.length * 100) + '%';
+    }
+    bulkBusy = false;
+    var okN = out.filter(function(r){ return r.ok; }).length, bad = out.filter(function(r){ return !r.ok; });
+    lastCreds = { title:'สร้างบัญชีเสร็จแล้ว ' + okN + ' จาก ' + out.length + ' สถานี', text:'ดาวน์โหลดไฟล์รหัสผ่านแล้ว <b>(เก็บไฟล์นี้ไว้ — รหัสผ่านดูย้อนหลังไม่ได้)</b>' + (bad.length ? '<br><span style="color:var(--signal)">ไม่สำเร็จ ' + bad.length + ' สถานี เช่น ' + esc(bad[0].station) + ': ' + esc(bad[0].error || '') + '</span>' : ''), csv:out };
+    csvDownload(out, 'gecc-station-accounts-' + new Date().toISOString().slice(0, 10) + '.csv');
+    await reload();
+  }
+};
+(async function init(){
+  if(!window.GeccDB) return;
+  try{ await window.GeccDB.ready; }catch(e){}
+  var pageEl = document.querySelector('.page'); if(!pageEl) return;
+  if(window.GeccDB.enabled && (!window.GeccDB.me || window.GeccDB.me.role !== 'officer')) return;   // only officers manage accounts
+  if(!window.GeccDB.enabled){
+    var note = document.createElement('div'); note.className = 'ac-msg info'; note.style.margin = '0 0 14px';
+    note.innerHTML = 'ตอนนี้แสดงข้อมูลตัวอย่าง · เมื่อเชื่อมฐานข้อมูลกลางแล้ว หน้านี้จะเปลี่ยนเป็นจัดการ <b>บัญชีล็อกอินจริงของทุกสถานี</b> (สร้างให้ทั้ง 444 สถานีในปุ่มเดียว รีเซ็ต/ลบรหัสผ่านได้)';
+    pageEl.insertBefore(note, pageEl.firstChild); return;
+  }
+  Array.prototype.forEach.call(pageEl.children, function(ch){ ch.style.display = 'none'; });
+  pageEl.appendChild(root);
+  root.innerHTML = '<div class="ac-msg info">⏳ กำลังโหลดรายชื่อบัญชี...</div>';
+  await reload();
+})();
+})();
 </script>
 <!--GECC_CHAT_START-->
 <script>
