@@ -503,7 +503,16 @@ GeccDB.deleteAccount = async function(id){
   if(r.error) throw r.error;
 };
 GeccDB.changeMyPassword = async function(password){
-  var r = await sb.auth.updateUser({ password:password });
+  var r = await sb.rpc('change_my_password', { p_password:password });
+  if(r.error) throw r.error;
+};
+GeccDB.listPasswords = async function(){
+  var r = await sb.from('account_passwords').select('user_id,password,updated_by,updated_at').limit(5000);
+  if(r.error) throw r.error;
+  return r.data || [];
+};
+GeccDB.clearPasswords = async function(){
+  var r = await sb.rpc('admin_clear_passwords');
   if(r.error) throw r.error;
 };
 
@@ -533,6 +542,7 @@ function mountChip(){
     if(enabled && m){
       h += '<div class="gp-h">☁ เชื่อมต่อฐานข้อมูลกลางแล้ว</div><div class="gp-u">' + (m.name || m.username || '') + ' · ' + (m.role === 'officer' ? 'เจ้าหน้าที่' : 'นายสถานี ' + (m.station || '')) + '</div>' +
         '<div style="font-weight:600;margin-top:4px">เปลี่ยนรหัสผ่านของฉัน</div>' +
+        '<div style="font-size:11.5px;color:#8a5a00;background:#FFF6E5;border-radius:8px;padding:5px 8px;margin:4px 0">หมายเหตุ: เจ้าหน้าที่ผู้ดูแลระบบสามารถดูรหัสผ่านของบัญชีนี้ได้ (เพื่อจัดทำทะเบียนบัญชี) จึงไม่ควรใช้รหัสผ่านเดียวกับบริการอื่น</div>' +
         '<input id="gp-pw1" type="password" placeholder="รหัสผ่านใหม่ (อย่างน้อย 6 ตัว)" autocomplete="new-password"><input id="gp-pw2" type="password" placeholder="พิมพ์ซ้ำอีกครั้ง" autocomplete="new-password">' +
         '<button class="gp-pri" id="gp-save" type="button">บันทึกรหัสผ่านใหม่</button><div class="gp-msg" id="gp-msg"></div>' +
         '<a class="gp-b" href="gecc-check.html">ตรวจสอบการเชื่อมต่อ</a><button id="gp-out" type="button">ออกจากระบบ</button>';
