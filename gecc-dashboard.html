@@ -416,6 +416,46 @@
     box-shadow: 0 14px 30px -10px rgba(17,19,39,0.6);
   }
 
+
+  /* ===== real-data dashboard ===== */
+  .dz-panel{ background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:18px 20px; margin-bottom:20px; }
+  .dz-panel h2{ font-size:15px; margin:0 0 4px; } .dz-panel .sub{ font-size:12.5px; color:var(--text-dim); margin:0 0 14px; }
+  .dz-source{ font-size:12px; color:var(--text-dim); margin:-10px 0 18px; }
+  .dz-line{ padding:12px 0; border-top:1px solid var(--divider); } .dz-line:first-of-type{ border-top:none; padding-top:2px; }
+  .dz-line-h{ display:flex; justify-content:space-between; align-items:baseline; gap:10px; flex-wrap:wrap; margin-bottom:7px; }
+  .dz-line-h b{ font-size:14px; } .dz-line-h span{ font-size:12px; color:var(--text-dim); }
+  .dz-bar{ display:flex; height:9px; border-radius:6px; overflow:hidden; background:var(--divider); margin-bottom:8px; }
+  .dz-bar i{ display:block; height:100%; } .dz-bar .pass{ background:var(--good); } .dz-bar .fail{ background:var(--amber); } .dz-bar .none{ background:#CFD3E6; }
+  .dz-dots{ display:flex; flex-wrap:wrap; gap:3px; }
+  .dz-dots a{ width:9px; height:9px; border-radius:50%; display:block; transition:transform .1s; }
+  .dz-dots a:hover{ transform:scale(1.9); position:relative; z-index:2; }
+  .dz-dots .pass{ background:var(--good); } .dz-dots .fail{ background:var(--amber); } .dz-dots .none{ background:#CFD3E6; }
+  .dz-legend{ display:flex; gap:20px; flex-wrap:wrap; font-size:12px; color:var(--text-dim); margin-top:10px; }
+  .dz-legend i{ display:inline-block; width:10px; height:10px; border-radius:50%; margin-right:6px; vertical-align:-1px; }
+  .dz-levels{ display:flex; gap:14px; flex-wrap:wrap; }
+  .dz-level{ flex:1; min-width:150px; border:1px solid var(--border); border-radius:12px; padding:10px 14px; }
+  .dz-level .n{ font-size:24px; font-weight:700; } .dz-level .l{ font-size:12px; color:var(--text-dim); }
+  .dz-tools{ display:flex; gap:10px; flex-wrap:wrap; align-items:center; padding:14px 16px; border-bottom:1px solid var(--divider); }
+  .dz-in, .dz-sel{ font-family:var(--font-th); font-size:13px; padding:8px 12px; border:1px solid var(--input-border); border-radius:10px; background:var(--surface-alt); color:var(--text-strong); }
+  .dz-in{ min-width:240px; flex:1; max-width:320px; }
+  .dz-chip{ font-family:var(--font-th); font-size:12px; padding:5px 12px; border-radius:20px; border:1px solid var(--input-border); background:var(--surface); color:var(--text-dim); cursor:pointer; white-space:nowrap; }
+  .dz-chip.active{ background:var(--ink); color:var(--cream); border-color:var(--ink); }
+  .dz-chip .n{ opacity:.65; margin-left:4px; font-size:11px; }
+  .dz-table{ width:100%; border-collapse:collapse; font-size:13px; }
+  .dz-table th{ text-align:left; font-size:11.5px; color:var(--text-dim); padding:10px 12px; border-bottom:1px solid var(--border); white-space:nowrap; }
+  .dz-table td{ padding:10px 12px; border-bottom:1px solid var(--divider); vertical-align:middle; }
+  .dz-table tbody tr{ cursor:pointer; } .dz-table tbody tr:hover{ background:var(--surface-alt); }
+  .dz-table .nm b{ display:block; } .dz-table .nm span{ font-size:11px; color:var(--text-faint); font-family:var(--font-mono); }
+  .dz-table .num{ font-family:var(--font-mono); font-size:12.5px; white-space:nowrap; }
+  .dz-table .tot{ font-weight:700; font-family:var(--font-mono); }
+  .dz-st{ font-size:11px; padding:3px 10px; border-radius:20px; font-weight:600; white-space:nowrap; }
+  .dz-st.pass{ background:rgba(16,185,129,.14); color:var(--good); } .dz-st.fail{ background:rgba(255,176,32,.2); color:var(--amber-dim); } .dz-st.none{ background:var(--divider); color:var(--text-dim); }
+  .dz-pager{ display:flex; justify-content:space-between; align-items:center; gap:10px; padding:12px 16px; font-size:12px; color:var(--text-dim); }
+  .dz-pager button{ font-family:var(--font-th); font-size:12.5px; font-weight:600; padding:6px 14px; border-radius:20px; border:1px solid var(--input-border); background:var(--surface); color:var(--text-strong); cursor:pointer; }
+  .dz-pager button:disabled{ opacity:.4; cursor:default; }
+  .dz-refresh{ font-family:var(--font-th); font-size:12px; border:1px solid var(--input-border); background:var(--surface); color:var(--text-dim); border-radius:20px; padding:3px 12px; cursor:pointer; margin-left:8px; }
+  .dz-err{ background:rgba(239,68,68,.1); border:1px solid rgba(239,68,68,.4); color:var(--signal); border-radius:12px; padding:12px 16px; margin-bottom:16px; font-size:13px; }
+  @media (max-width:820px){ .dz-table .hide-s{ display:none; } }
 </style>
 <!--GECC_BACKEND_START-->
 <script>document.write('<script src="gecc-config.js?t=' + Date.now() + '"><\/script>')</script>
@@ -670,6 +710,20 @@ GeccDB.clearPasswords = async function(){
   var r = await sb.rpc('admin_clear_passwords');
   if(r.error) throw r.error;
 };
+/* all audit items of all stations (officers only) — pages through the 1000-row limit of the API */
+GeccDB.loadAllAudit = async function(){
+  var out = [], from = 0, size = 1000;
+  for(;;){
+    var r = await sb.from('audit_items').select('station_code,crit,item_no,checked,note,drive_link,updated_at')
+      .order('station_code', { ascending:true }).order('crit', { ascending:true }).order('item_no', { ascending:true }).range(from, from + size - 1);
+    if(r.error) throw r.error;
+    var d = r.data || [];
+    out = out.concat(d);
+    if(d.length < size || from > 200000) break;
+    from += size;
+  }
+  return out;
+};
 
 /* ---------- connection chip (bottom-left) + account popover ---------- */
 function mountChip(){
@@ -768,156 +822,64 @@ if(document.body) mountChip(); else document.addEventListener('DOMContentLoaded'
   <div class="page-head">
     <div>
       <h1>ศูนย์บัญชาการภาพรวมประเทศ</h1>
-      <p>สถานะความพร้อมมาตรฐาน GECC ของสถานีรถไฟทั่วประเทศ</p>
+      <p id="dz-sub">สถานะความพร้อมมาตรฐาน GECC ของสถานีรถไฟทั่วประเทศ</p>
     </div>
     <div style="display:flex; align-items:center; gap:14px;">
       <a href="gecc-command-center.html" style="display:inline-flex; align-items:center; gap:8px; background:linear-gradient(135deg,#111327,#1E3252); color:#F4F3FA; text-decoration:none; padding:11px 18px; border-radius:20px; font-size:13px; font-weight:600; box-shadow:0 8px 20px -8px rgba(227,168,87,0.5); border:1px solid #FFB020;">🖥️ เปิดโหมดจอภาพรวม (Live)</a>
-      <div class="updated">อัปเดตล่าสุด<br>12 ก.ย. 2569 · 09:40 น.</div>
+      <div class="updated" id="dz-updated">กำลังโหลดข้อมูล...</div>
     </div>
   </div>
 
+  <div class="dz-source" id="dz-source"></div>
+  <div id="dz-err"></div>
+
   <div class="kpi-row">
-    <div class="kpi-card">
-      <div class="label">สถานีทั้งหมดในระบบ</div>
-      <div class="value">142</div>
-    </div>
-    <div class="kpi-card good">
-      <div class="label">ผ่านมาตรฐาน GECC</div>
-      <div class="value">68 <small>47.9%</small></div>
-    </div>
-    <div class="kpi-card amber">
-      <div class="label">รอตรวจประเมิน</div>
-      <div class="value">41</div>
-    </div>
-    <div class="kpi-card bad">
-      <div class="label">ต้องปรับปรุงเร่งด่วน</div>
-      <div class="value">33</div>
-    </div>
+    <div class="kpi-card"><div class="label">สถานีทั้งหมดในระบบ</div><div class="value" id="k-total">444</div><div class="delta">ตามสมุดเลขรหัสแทนชื่อสถานี รฟท.</div></div>
+    <div class="kpi-card good"><div class="label">ผ่านมาตรฐาน GECC</div><div class="value" id="k-pass">–</div><div class="delta" id="k-pass-d"></div></div>
+    <div class="kpi-card amber"><div class="label">ยังไม่ผ่านเกณฑ์ (เริ่มประเมินแล้ว)</div><div class="value" id="k-fail">–</div><div class="delta" id="k-fail-d"></div></div>
+    <div class="kpi-card"><div class="label">ยังไม่เริ่มประเมิน</div><div class="value" id="k-none">–</div><div class="delta" id="k-none-d"></div></div>
   </div>
 
   <div class="csat-strip">
-    <span class="label">คะแนนความพึงพอใจเฉลี่ยทั่วประเทศ (CSAT)</span>
-    <div class="csat-bar"><div class="csat-bar-fill"></div></div>
-    <span class="score">4.3 / 5.0</span>
+    <div class="csat-label">คะแนน GECC เฉลี่ย (เต็ม 100)<small id="avg-sub"></small></div>
+    <div class="csat-bar"><div class="csat-bar-fill" id="avg-bar" style="width:0%"></div></div>
+    <div class="csat-score" id="avg-score">–</div>
   </div>
 
-  <div class="panel-block">
-    <div class="panel-block-head">
-      <h2>โครงข่ายทางรถไฟสายหลัก</h2>
-      <span>4 สาย · 22 สถานีตัวอย่าง</span>
+  <div class="dz-panel">
+    <h2>ระดับมาตรฐานที่ได้รับจากการประเมินตนเอง</h2>
+    <p class="sub">นับเฉพาะสถานีที่ผ่านเงื่อนไข (เกณฑ์ที่ ๑ ครบ ๑๕ ข้อ + เกณฑ์พื้นฐานด้านคุณภาพครบ ๘ ข้อ) และคะแนนรวมตั้งแต่ ๗๐</p>
+    <div class="dz-levels">
+      <div class="dz-level"><div class="n" id="lv-2">–</div><div class="l">ระดับเป็นเลิศ (๙๐–๑๐๐)</div></div>
+      <div class="dz-level"><div class="n" id="lv-1">–</div><div class="l">ระดับก้าวหน้า (๘๐–๘๙)</div></div>
+      <div class="dz-level"><div class="n" id="lv-0">–</div><div class="l">ระดับพื้นฐาน (๗๐–๗๙)</div></div>
     </div>
-    <p class="panel-sub">มุมมองแบบผังราง แสดงสถานะ GECC ของแต่ละสถานีตามสายทางที่แยกจากสถานีกรุงเทพ (หัวลำโพง)</p>
+  </div>
 
-    <svg viewBox="0 0 940 360" width="100%" height="auto" xmlns="http://www.w3.org/2000/svg">
-      <!-- hub -->
-      <circle cx="90" cy="180" r="7" fill="#F4F3FA" stroke="#FFB020" stroke-width="2"/>
-      <g class="line-labels"><text x="30" y="205" class="hub">กรุงเทพ</text></g>
-
-      <!-- Northern line -->
-      <path d="M90,180 C 220,180 260,60 520,55" fill="none" stroke="#2E3358" stroke-width="2"/>
-      <g class="line-labels"><text x="530" y="50">สายเหนือ</text></g>
-      <g>
-        <circle cx="200" cy="151" r="4.5" fill="#10B981"/>
-        <circle cx="310" cy="103" r="4.5" fill="#10B981"/>
-        <circle cx="400" cy="72" r="4.5" fill="#FFB020"/>
-        <circle cx="490" cy="56" r="4.5" fill="#FFB020"/>
-        <text x="192" y="140" class="station-name">อยุธยา</text>
-        <text x="380" y="90" class="station-name">พิษณุโลก</text>
-        <text x="455" y="44" class="station-name">เชียงใหม่</text>
-      </g>
-
-      <!-- Northeastern line -->
-      <path d="M90,180 C 240,180 300,120 560,115" fill="none" stroke="#2E3358" stroke-width="2"/>
-      <g class="line-labels"><text x="570" y="112">สายอีสาน</text></g>
-      <g>
-        <circle cx="220" cy="167" r="4.5" fill="#FFB020"/>
-        <circle cx="350" cy="138" r="4.5" fill="#EF4444"/>
-        <circle cx="460" cy="120" r="4.5" fill="#EF4444"/>
-        <circle cx="540" cy="115" r="4.5" fill="#10B981"/>
-        <text x="200" y="182" class="station-name">สระบุรี</text>
-        <text x="330" y="155" class="station-name">นครราชสีมา</text>
-        <text x="480" y="108" class="station-name">อุบลราชธานี</text>
-      </g>
-
-      <!-- Eastern line -->
-      <path d="M90,180 C 220,180 260,225 480,235" fill="none" stroke="#2E3358" stroke-width="2"/>
-      <g class="line-labels"><text x="490" y="238">สายตะวันออก</text></g>
-      <g>
-        <circle cx="230" cy="197" r="4.5" fill="#10B981"/>
-        <circle cx="340" cy="216" r="4.5" fill="#10B981"/>
-        <circle cx="440" cy="232" r="4.5" fill="#FFB020"/>
-        <text x="210" y="212" class="station-name">ฉะเชิงเทรา</text>
-        <text x="400" y="248" class="station-name">ระยอง</text>
-      </g>
-
-      <!-- Southern line -->
-      <path d="M90,180 C 200,180 240,300 460,310" fill="none" stroke="#2E3358" stroke-width="2"/>
-      <g class="line-labels"><text x="470" y="313">สายใต้</text></g>
-      <g>
-        <circle cx="190" cy="223" r="4.5" fill="#EF4444"/>
-        <circle cx="290" cy="262" r="4.5" fill="#FFB020"/>
-        <circle cx="380" cy="292" r="4.5" fill="#FFB020"/>
-        <circle cx="450" cy="308" r="4.5" fill="#EF4444"/>
-        <text x="165" y="238" class="station-name">เพชรบุรี</text>
-        <text x="340" y="278" class="station-name">สุราษฎร์ธานี</text>
-        <text x="400" y="326" class="station-name">หาดใหญ่</text>
-      </g>
-    </svg>
-
-    <div class="legend">
-      <div class="legend-item"><span class="legend-dot" style="background:#10B981"></span>ผ่านมาตรฐาน GECC</div>
-      <div class="legend-item"><span class="legend-dot" style="background:#FFB020"></span>รอตรวจประเมิน</div>
-      <div class="legend-item"><span class="legend-dot" style="background:#EF4444"></span>ต้องปรับปรุงเร่งด่วน</div>
-    </div>
+  <div class="dz-panel">
+    <h2>สถานะ GECC รายสถานี แยกตามสายการเดินรถ</h2>
+    <p class="sub">แต่ละจุดคือ 1 สถานีเรียงตามระยะทางจากต้นทาง (ชี้เมาส์เพื่อดูชื่อและคะแนน · คลิกเพื่อเปิดหน้าสถานี)</p>
+    <div id="dz-board"></div>
+    <div class="dz-legend"><span><i style="background:var(--good)"></i>ผ่านมาตรฐาน GECC</span><span><i style="background:var(--amber)"></i>ยังไม่ผ่านเกณฑ์ (เริ่มประเมินแล้ว)</span><span><i style="background:#CFD3E6"></i>ยังไม่เริ่มประเมิน</span></div>
   </div>
 
   <div class="table-block">
-    <div class="table-block-head">
-      <h2>สถานีที่ต้องติดตามเร่งด่วน</h2>
-      <p>เรียงตามคะแนนความพึงพอใจต่ำสุดและสถานะที่ยังไม่ผ่านเกณฑ์</p>
+    <div class="dz-tools">
+      <input class="dz-in" id="dz-q" placeholder="ค้นหาสถานี (ชื่อ / รหัส / ชื่อย่อ)" oninput="dz.search(this.value)">
+      <span id="dz-chips" style="display:flex;gap:6px;flex-wrap:wrap"></span>
+      <select class="dz-sel" id="dz-line" onchange="dz.line(this.value)"><option value="all">ทุกสาย</option></select>
+      <select class="dz-sel" id="dz-sort" onchange="dz.sort(this.value)">
+        <option value="attention">เรียง: ต้องติดตามก่อน</option>
+        <option value="low">เรียง: คะแนนต่ำ → สูง</option>
+        <option value="high">เรียง: คะแนนสูง → ต่ำ</option>
+        <option value="code">เรียง: ตามลำดับสมุดรหัส</option>
+      </select>
     </div>
-    <table>
-      <thead>
-        <tr>
-          <th>สถานี</th>
-          <th>สายทาง</th>
-          <th>สถานะ</th>
-          <th>CSAT</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr>
-          <td>นครราชสีมา</td>
-          <td class="line-tag">สายอีสาน</td>
-          <td><span class="badge bad">ต้องปรับปรุง</span></td>
-          <td class="csat-cell">3.1</td>
-        </tr>
-        <tr>
-          <td>เพชรบุรี</td>
-          <td class="line-tag">สายใต้</td>
-          <td><span class="badge bad">ต้องปรับปรุง</span></td>
-          <td class="csat-cell">3.3</td>
-        </tr>
-        <tr>
-          <td>อุบลราชธานี</td>
-          <td class="line-tag">สายอีสาน</td>
-          <td><span class="badge bad">ต้องปรับปรุง</span></td>
-          <td class="csat-cell">3.4</td>
-        </tr>
-        <tr>
-          <td>หาดใหญ่</td>
-          <td class="line-tag">สายใต้</td>
-          <td><span class="badge bad">ต้องปรับปรุง</span></td>
-          <td class="csat-cell">3.5</td>
-        </tr>
-        <tr>
-          <td>สระบุรี</td>
-          <td class="line-tag">สายอีสาน</td>
-          <td><span class="badge amber">รอตรวจประเมิน</span></td>
-          <td class="csat-cell">3.8</td>
-        </tr>
-      </tbody>
+    <table class="dz-table">
+      <thead><tr><th>สถานี</th><th class="hide-s">สาย</th><th>สถานะ</th><th class="hide-s">ระดับ</th><th class="hide-s">เกณฑ์ ๑</th><th class="hide-s">คุณภาพ</th><th class="hide-s">ผลลัพธ์</th><th>คะแนนรวม</th><th class="hide-s">ความคืบหน้า</th></tr></thead>
+      <tbody id="dz-body"></tbody>
     </table>
+    <div class="dz-pager"><span id="dz-count"></span><span><button id="dz-prev" onclick="dz.page(-1)">‹ ก่อนหน้า</button> <span id="dz-pg"></span> <button id="dz-next" onclick="dz.page(1)">ถัดไป 10 ›</button></span></div>
   </div>
 
 </div>
@@ -1127,6 +1089,632 @@ document.addEventListener('keydown', function(e){
     closeSearch();
   }
 });
+</script>
+<script>
+// ===================== real GECC overview: 444 stations + scores computed from audit data =====================
+(function(){
+// [code, name, abbr TH, abbr EN, class, line indexes] from the SRT station code book
+var ST = [
+["1001","กรุงเทพ","กท.","BKK",1,[0,2]],
+["1004","สามเสน","สส.","SAM",3,[0]],
+["1007","ชุมทางบางซื่อ","บซ.","BSJ",1,[0,3]],
+["1000","สถานีกลางกรุงเทพอภิวัฒน์","กภ.","KTW",0,[0]],
+["1011","บางเขน","บข.","BKH",4,[0]],
+["1015","หลักสี่","ลส.","LKS",4,[0]],
+["1017","ดอนเมือง","ดม.","DMU",1,[0]],
+["1021","รังสิต","รต.","RSI",1,[0]],
+["1022","เชียงราก","ชร.","CHR",3,[0]],
+["1024","เชียงรากน้อย","ชน.","CRN",3,[0]],
+["1026","คลองพุทรา","พซ.","KPS",4,[0]],
+["1028","บางปะอิน","บอ.","BPI",2,[0]],
+["1029","บ้านโพ","บพ.","BPH",4,[0]],
+["1031","อยุธยา","อย.","AYY",1,[0]],
+["1032","บ้านม้า","มา.","BAA",4,[0]],
+["1033","มาบพระจันทร์","บจ.","MPC",4,[0]],
+["1035","พระแก้ว","พก.","PHK",4,[0]],
+["1036","ชุมทางบ้านภาชี","ภช.","BPJ",1,[0,1]],
+["1037","หนองวิวัฒน์","วิ.","NGW",4,[0]],
+["1039","ท่าเรือ","ทร.","THR",2,[0]],
+["1041","บ้านหมอ","มอ.","BMO",2,[0]],
+["1045","หนองโดน","โด.","NDO",3,[0]],
+["1047","บ้านกลับ","บก.","BKP",4,[0]],
+["1048","บ้านป่าหวาย","ปว.","BPW",4,[0]],
+["1050","ลพบุรี","ลบ.","LBR",1,[0]],
+["1051","ท่าแค","ทแ.","THK",4,[0]],
+["1053","โคกกะเทียม","คท.","KKT",4,[0]],
+["1055","หนองเต่า","นต.","NGT",4,[0]],
+["1056","หนองทรายขาว","ซข.","NSK",4,[0]],
+["1058","บ้านหมี่","บม.","BAM",2,[0]],
+["1061","จันเสน","จส.","CHS",3,[0]],
+["1063","ช่องแค","ชค.","CHK",3,[0]],
+["1066","โพนทอง","โพ.","POT",3,[0]],
+["1067","บ้านตาคลี","ตล.","BTK",2,[0]],
+["1069","ดงมะกุ","ดง.","DMK",4,[0]],
+["1070","หัวหวาย","หว.","HUW",4,[0]],
+["1072","หนองโพ","นพ.","NGP",3,[0]],
+["1074","หัวงิ้ว","หง.","HNG",4,[0]],
+["1076","เนินมะกอก","มก.","NMA",3,[0]],
+["1079","เขาทอง","ขท.","KTH",4,[0]],
+["1082","นครสวรรค์","นว.","NKS",1,[0]],
+["1083","ปากน้ำโพ","ปพ.","PNP",2,[0]],
+["1226","บึงบอระเพ็ด","เพ.","BBP",4,[0]],
+["1084","ทับกฤช","ทก.","TKT",3,[0]],
+["1086","คลองปลากด","ปก.","KPK",3,[0]],
+["1088","ชุมแสง","ชส.","CMS",2,[0]],
+["1091","วังกร่าง","กา.","WAK",4,[0]],
+["1093","บางมูลนาก","นา.","BMN",2,[0]],
+["1095","หอไกร","ไก.","HOK",4,[0]],
+["1097","ดงตะขบ","ดข.","DTK",4,[0]],
+["1099","ตะพานหิน","ตห.","TPH",2,[0]],
+["1101","ห้วยเกตุ","ยต.","HKE",4,[0]],
+["1103","หัวดง","หด.","HUD",3,[0]],
+["1105","วังกรด","วร.","WKT",3,[0]],
+["1107","พิจิตร","พจ.","PIC",1,[0]],
+["1109","ท่าฬ่อ","ทฬ.","THL",3,[0]],
+["1111","บางกระทุ่ม","ทม.","BKT",2,[0]],
+["1112","แม่เทียบ","แท.","MAT",4,[0]],
+["1114","บ้านใหม่","บห.","BMA",3,[0]],
+["1116","บึงพระ","บะ.","BUP",2,[0]],
+["1118","พิษณุโลก","พล.","PSL",1,[0]],
+["1119","บ้านเต็งหนาม","เห.","BTN",3,[0]],
+["1121","บ้านตูม","ตม.","BTU",4,[0]],
+["1122","แควน้อย","คน.","KWN",4,[0]],
+["1125","พรหมพิราม","พห.","PPR",3,[0]],
+["1127","หนองตม","หต.","NOO",3,[0]],
+["1130","บ้านบุ่ง","บง.","BBU",4,[0]],
+["1131","บ้านโคน","บค.","BKN",4,[0]],
+["1134","พิชัย","พย.","PCH",3,[0]],
+["1136","ไร่อ้อย","รอ.","ROI",4,[0]],
+["1137","ชุมทางบ้านดารา","ดร.","BDJ",3,[0]],
+["1144","ท่าสัก","าส.","THS",3,[0]],
+["1146","ตรอน","ตอ.","TON",3,[0]],
+["1148","วังกะพี้","วก.","WKP",4,[0]],
+["1150","อุตรดิตถ์","อด.","UTD",1,[0]],
+["1151","ศิลาอาสน์","ศล.","SLA",1,[0]],
+["1154","บ้านด่าน","บด.","BDA",4,[0]],
+["1157","ปางต้นผึ้ง","ปต.","PTP",4,[0]],
+["1160","ห้วยไร่","หา.","HUR",4,[0]],
+["1164","เด่นชัย","ดช.","DCH",1,[0]],
+["1165","ปากปาน","ปา.","PPA",4,[0]],
+["1167","แก่งหลวง","กล.","KAL",3,[0]],
+["1172","บ้านปิน","บป.","BAP",2,[0]],
+["1176","ผาคัน","ผน.","PKN",4,[0]],
+["1180","ปางป๋วย","ปย.","PPU",4,[0]],
+["1182","แม่จาง","มจ.","MCH",4,[0]],
+["1184","แม่เมาะ","มม.","MAM",3,[0]],
+["1187","ศาลาผาลาด","ผล.","SPL",4,[0]],
+["1189","แม่ทะ","มท.","MTH",3,[0]],
+["1192","หนองวัวเฒ่า","วถ.","NOW",3,[0]],
+["1193","นครลำปาง","ลป.","NKL",1,[0]],
+["1196","ห้างฉัตร","หฉ.","HGC",3,[0]],
+["1198","ปางม่วง","ปม.","PAM",4,[0]],
+["1201","แม่ตานน้อย","มต.","MTN",3,[0]],
+["1204","ขุนตาน","ขน.","KHT",3,[0]],
+["1206","ทาชมภู","าช.","TCP",3,[0]],
+["1208","ศาลาแม่ทา","ลท.","SMT",3,[0]],
+["1212","หนองหล่ม","งล.","NOL",3,[0]],
+["1216","ลำพูน","ลพ.","LMP",2,[0]],
+["1218","ป่าเส้า","ปส.","PSO",4,[0]],
+["1220","สารภี","ภี.","SRP",3,[0]],
+["1222","เชียงใหม่","ชม.","CGM",1,[0]],
+["1139","คลองมะพลับ","มป.","KML",4,[0]],
+["1143","สวรรคโลก","สว.","SWL",4,[0]],
+["2001","หนองกวย","นก.","NKU",4,[1]],
+["2002","หนองแซง","นซ.","NSE",3,[1]],
+["2004","หนองสีดา","นด.","NOA",4,[1]],
+["2005","บ้านป๊อกแป๊ก","ปป.","BPP",3,[1]],
+["2007","สระบุรี","ะร.","SRR",1,[1]],
+["2009","ชุมทางหนองบัว","นบ.","NBU",3,[1]],
+["2011","ชุมทางแก่งคอย","กค.","KKJ",1,[1,2]],
+["2082","มาบกะเบา","มบ.","MKB",3,[1]],
+["2083","ผาเสด็จ","ผด.","PSD",3,[1]],
+["2084","หินลับ","หล.","HIL",2,[1]],
+["2086","มวกเหล็ก","มล.","MUL",2,[1]],
+["2088","กลางดง","าง.","KDO",3,[1]],
+["2089","ปางอโศก","โศ.","PAS",3,[1]],
+["2091","บันไดม้า","ได.","BDM",3,[1]],
+["2093","ปากช่อง","ปช.","PAC",1,[1]],
+["2095","ซับม่วง","ซม.","SMU",3,[1]],
+["2096","จันทึก","จท.","CNT",4,[1]],
+["2097","คลองขนานจิตร","ขจ.","KKC",4,[1]],
+["2100","คลองไผ่","คผ.","KPH",3,[1]],
+["2101","ลาดบัวขาว","ลข.","LBK",4,[1]],
+["2102","บ้านใหม่สำโรง","สำ.","BMS",4,[1]],
+["2103","หนองน้ำขุ่น","นข.","NGK",4,[1]],
+["2105","สีคิ้ว","สค.","SKI",2,[1]],
+["2107","สูงเนิน","สน.","SNN",3,[1]],
+["2109","กุดจิก","กจ.","KCK",3,[1]],
+["2111","โคกกรวด","คก.","KKU",4,[1]],
+["2113","ภูเขาลาด","ขล.","PKL",4,[1]],
+["2114","นครราชสีมา","รส.","NRS",1,[1]],
+["2115","ชุมทางถนนจิระ","จร.","TNJ",1,[1]],
+["2211","บ้านพะเนา","พเ.","BPN",3,[1]],
+["2213","ท่าช้าง","ชา.","TCH",3,[1]],
+["2215","หนองมโนรมย์","มโ.","NOM",4,[1]],
+["2217","จักราช","จช.","CKR",2,[1]],
+["2220","บ้านหินโคน","หโ.","BHK",4,[1]],
+["2222","หินดาษ","ดา.","HID",3,[1]],
+["2224","ห้วยแถลง","ถล.","HTL",2,[1]],
+["2227","หนองกระทิง","ทง.","NKT",4,[1]],
+["2229","ลำปลายมาศ","ลำ.","LPM",2,[1]],
+["2231","ทะเมนชัย","มช.","TMC",3,[1]],
+["2233","บ้านแสลงพัน","งพ.","BSP",4,[1]],
+["2234","บ้านหนองตาด","ตา.","BNT",4,[1]],
+["2236","บุรีรัมย์","รย.","BRR",1,[1]],
+["2239","ห้วยราช","หร.","HRA",2,[1]],
+["2243","กระสัง","ะส.","KSG",2,[1]],
+["2244","หนองเต็ง","เต.","NOE",4,[1]],
+["2246","ลำชี","ลช.","LCH",3,[1]],
+["2248","สุรินทร์","สร.","SUR",1,[1]],
+["2250","บุฤาษี","บุ.","BRU",4,[1]],
+["2252","เมืองที","อท.","MUT",4,[1]],
+["2254","กะโดนค้อ","ดค.","KDK",4,[1]],
+["2256","ศีขรภูมิ","รภ.","SKP",2,[1]],
+["2258","บ้านกะลัน","ลน.","BKL",4,[1]],
+["2261","สำโรงทาบ","สบ.","STP",2,[1]],
+["2264","ห้วยทับทัน","ทท.","HTT",3,[1]],
+["2267","อุทุมพรพิสัย","อุ.","UTP",2,[1]],
+["2270","บ้านเนียม","บเ.","BNI",4,[1]],
+["2273","ศรีสะเกษ","เก.","SSK",1,[1]],
+["2277","หนองแวง","อว.","NNW",4,[1]],
+["2279","บ้านคล้อ","าค.","BNK",4,[1]],
+["2281","กันทรารมย์","าร.","KTR",2,[1]],
+["2285","ห้วยขยุง","ขย.","HKY",3,[1]],
+["2288","บุ่งหวาย","งห.","BWI",4,[1]],
+["2290","อุบลราชธานี","อน.","UBR",1,[1]],
+["2117","บ้านเกาะ","กะ.","BAK",4,[1]],
+["2120","บ้านกระโดน","กโ.","BKD",4,[1]],
+["2121","หนองแมว","นง.","NNM",4,[1]],
+["2122","โนนสูง","นโ.","NSU",3,[1]],
+["2124","บ้านดงพลอง","ดพ.","BDP",4,[1]],
+["2126","บ้านมะค่า","มค.","BMK",4,[1]],
+["2128","พลสงคราม","พค.","PSK",4,[1]],
+["2129","บ้านดอนใหญ่","ดญ.","BDY",4,[1]],
+["2131","เมืองคง","งค.","MUK",3,[1]],
+["2133","โนนทองหลาง","นท.","NTL",4,[1]],
+["2136","ชุมทางบัวใหญ่","วญ.","BYJ",1,[1]],
+["2139","หนองบัวลาย","งบ.","NNB",3,[1]],
+["2142","หนองมะเขือ","งอ.","NMK",4,[1]],
+["2144","เมืองพล","อล.","MUP",2,[1]],
+["2149","บ้านหัน","าห.","BHN",4,[1]],
+["2152","บ้านไผ่","บผ.","PHI",2,[1]],
+["2156","บ้านแฮด","ฮด.","BHT",4,[1]],
+["2160","ท่าพระ","พะ.","TAP",3,[1]],
+["2163","ขอนแก่น","ขอ.","KHK",1,[1]],
+["2166","สำราญ","าญ.","SAR",4,[1]],
+["2170","โนนพะยอม","พอ.","NPY",3,[1]],
+["2172","น้ำพอง","อง.","NPO",2,[1]],
+["2174","ห้วยเสียว","ยว.","HUS",4,[1]],
+["2177","เขาสวนกวาง","สง.","KSK",3,[1]],
+["2181","โนนสะอาด","โอ.","NSA",3,[1]],
+["2183","ห้วยเกิ้ง","ยก.","HKG",3,[1]],
+["2186","กุมภวาปี","วป.","KWP",2,[1]],
+["2188","ห้วยสามพาด","หพ.","HSP",4,[1]],
+["2190","หนองตะไก้","งต.","NNT",3,[1]],
+["2194","หนองขอนกว้าง","ออ.","NKK",3,[1]],
+["2195","อุดรธานี","รด.","UTN",1,[1]],
+["2201","นาพู่","พู.","NPU",4,[1]],
+["2207","นาทา","ยน.","NAA",4,[1]],
+["2209","หนองคาย","นค.","NKI",1,[1]],
+["2012","บ้านช่องใต้","ชต.","BCT",3,[1]],
+["2017","หินซ้อน","หซ.","HIS",4,[1]],
+["2020","แก่งเสือเต้น","แส.","KST",4,[1]],
+["2024","โคกสลุง","คุ.","KSL",4,[1]],
+["2026","สุรนารายณ์","ะน.","SNR",4,[1]],
+["2033","ลำนารายณ์","ลา.","LNR",3,[1]],
+["2038","แผ่นดินทอง","แง.","PDT",4,[1]],
+["2042","โคกคลี","คี.","KKI",3,[1]],
+["2045","ช่องสำราญ","อช.","CSR",3,[1]],
+["2049","บ้านวะตะแบก (เทพสถิต)","แบ.","BWT",3,[1]],
+["2052","ห้วยยายจิ๋ว","จย.","HYC",3,[1]],
+["2057","บำเหน็จณรงค์","าจ.","BNN",2,[1]],
+["2062","จัตุรัส","จต.","CTR",2,[1]],
+["2066","หนองฉิม","ฉม.","NOC",4,[1]],
+["2072","บ้านเหลื่อม","นเ.","BLM",3,[1]],
+["2076","หนองพลวง","งว.","NNP",4,[1]],
+["3001","มักกะสัน","มส.","MKS",2,[2]],
+["3009","คลองตัน","คต.","KOT",2,[2]],
+["3010","หัวหมาก","หม.","HUM",2,[2]],
+["3012","บ้านทับช้าง","ทช.","BTC",3,[2]],
+["3014","ลาดกระบัง","ะบ.","LKB",3,[2]],
+["3015","หัวตะเข้","หข.","HTK",2,[2]],
+["3017","คลองหลวงแพ่ง","คพ.","KLP",4,[2]],
+["3019","คลองเปรง","คป.","PRE",3,[2]],
+["3021","คลองบางพระ","คบ.","KBP",4,[2]],
+["3023","ชุมทางฉะเชิงเทรา","ฉท.","CHJ",1,[2]],
+["3055","บางน้ำเปรี้ยว","บย.","BGP",3,[2]],
+["3057","ชุมทางคลองสิบเก้า","สเ.","KSI",3,[2]],
+["3059","โยทะกา","ยท.","YTK",4,[2]],
+["3061","บ้านสร้าง","สา.","BSA",2,[2]],
+["3064","บ้านปากพลี","าป.","BPA",4,[2]],
+["3066","ปราจีนบุรี","ปจ.","PCB",1,[2]],
+["3068","โคกมะกอก","กอ.","KMK",4,[2]],
+["3070","ประจันตคาม","จค.","PTK",3,[2]],
+["3072","บ้านดงบัง","ดบ.","BDB",4,[2]],
+["3075","กบินทร์บุรี","กบ.","KBB",2,[2]],
+["3078","หนองสัง","อส.","NNS",4,[2]],
+["3083","บ้านแก้ง","นแ.","BKE",4,[2]],
+["3087","สระแก้ว","ะก.","SKA",3,[2]],
+["3094","วัฒนานคร","วค.","WTN",3,[2]],
+["3100","อรัญประเทศ","อร.","ARP",2,[2]],
+["3130","ด่านพรมแดนบ้านคลองลึก","ลง.","BLK",4,[2]],
+["3118","องครักษ์","อษ.","OKA",4,[2]],
+["3120","วิหารแดง","วแ.","WHD",4,[2]],
+["3121","บุใหญ่","ให.","BUY",4,[2]],
+["3122","ชุมทางบ้านไผ่นาบุญ","บญ.","BPB",4,[2]],
+["3026","ดอนสีนนท์","ดอ.","DSN",4,[2]],
+["3029","พานทอง","งท.","PHT",3,[2]],
+["3032","ชลบุรี","ชบ.","COB",1,[2]],
+["3034","บางพระ","ระ.","PRA",4,[2]],
+["3036","ชุมทางศรีราชา","ศช.","SRC",2,[2]],
+["3039","บางละมุง","มุ.","BGL",2,[2]],
+["3041","พัทยา","พา.","PTY",2,[2]],
+["3043","บ้านห้วยขวาง","ยข.","BHW",3,[2]],
+["3045","ชุมทางเขาชีจรรย์","ชจ.","KCC",4,[2]],
+["3047","บ้านพลูตาหลวง","พต.","PTG",4,[2]],
+["3048","อู่ตะเภา","อภ.","UTA",4,[2]],
+["3049","จุกเสม็ด","จเ.","CAM",4,[2]],
+["3110","บ้านฉาง","บฉ.","BNC",4,[2]],
+["3115","มาบตาพุด","าพ.","MTP",3,[2]],
+["3002","แม่น้ำ","มน.","MAN",3,[2]],
+["4005","บางบำหรุ","บำ.","BGB",4,[3]],
+["4004","ชุมทางตลิ่งชัน","ตช.","TCJ",2,[3]],
+["4002","ธนบุรี","ธบ.","TBR",1,[3]],
+["4008","ศาลาธรรมสพน์","ทพ.","STS",3,[3]],
+["4009","ศาลายา","ลย.","SLY",2,[3]],
+["4010","วัดสุวรรณ","สุ.","WSW",3,[3]],
+["4012","วัดงิ้วราย","งร.","WRI",3,[3]],
+["4013","นครชัยศรี","รช.","NCS",3,[3]],
+["4014","ท่าแฉลบ","ฉล.","TCL",3,[3]],
+["4015","ต้นสำโรง","โร.","TSR",3,[3]],
+["4016","นครปฐม","คฐ.","NPT",1,[3]],
+["4018","โพรงมะเดื่อ","พด.","PMD",3,[3]],
+["4019","คลองบางตาล","บา.","KBT",3,[3]],
+["4020","ชุมทางหนองปลาดุก","ปด.","NPJ",2,[3]],
+["4079","บ้านโป่ง","โป.","BAG",2,[3]],
+["4081","นครชุมน์","นช.","NCH",4,[3]],
+["4082","คลองตาคด","ตค.","KTK",4,[3]],
+["4083","โพธาราม","พร.","PTR",2,[3]],
+["4085","เจ็ดเสมียน","จม.","CSM",3,[3]],
+["4087","บ้านกล้วย","าก.","BKI",4,[3]],
+["4089","ราชบุรี","รร.","RBR",1,[3]],
+["4090","บ้านคูบัว","บบ.","BKB",4,[3]],
+["4091","บ่อตะคร้อ","บร.","BOT",4,[3]],
+["4093","ปากท่อ","ปท.","PTO",3,[3]],
+["4095","บางเค็ม","งเ.","BGK",4,[3]],
+["4097","เขาย้อย","เข.","KYO",3,[3]],
+["4098","หนองปลาไหล","ปล.","NPL",4,[3]],
+["4099","บางจาก","จก.","BGC",4,[3]],
+["4101","เพชรบุรี","พบ.","PBR",1,[3]],
+["4104","เขาทโมน","โม.","KTM",4,[3]],
+["4105","หนองไม้เหลือง","นม.","NML",4,[3]],
+["4107","หนองจอก","หจ.","NNC",3,[3]],
+["4108","หนองศาลา","งา.","NOS",4,[3]],
+["4111","ชะอำ","ชอ.","CHA",2,[3]],
+["4114","ห้วยทรายเหนือ","ซน.","HSN",4,[3]],
+["4115","ห้วยทรายใต้","ซใ.","HST",3,[3]],
+["4118","หัวหิน","หห.","HHI",1,[3]],
+["4119","หนองแก","นอ.","NKA",4,[3]],
+["4120","สวนสนประดิพัทธ์","สป.","SSP",4,[3]],
+["4121","เขาเต่า","ขต.","KTO",3,[3]],
+["4123","วังก์พง","วพ.","WPO",3,[3]],
+["4124","ปราณบุรี","ปน.","PAB",3,[3]],
+["4126","หนองคาง","อค.","NKH",4,[3]],
+["4128","สามร้อยยอด","สย.","SRY",3,[3]],
+["4130","สามกระทาย","สท.","SKT",4,[3]],
+["4133","กุยบุรี","กย.","KBR",3,[3]],
+["4135","บ่อนอก","บน.","BON",4,[3]],
+["4138","ทุ่งมะเม่า","มเ.","TMM",4,[3]],
+["4140","คั่นกระได","กด.","KKD",4,[3]],
+["4142","ประจวบคีรีขันธ์","จข.","PKK",1,[3]],
+["4146","วังด้วน","วด.","WDN",4,[3]],
+["4149","ห้วยยาง","หย.","HUY",3,[3]],
+["4153","ทับสะแก","สก.","TSK",2,[3]],
+["4158","บ้านกรูด","กร.","BUT",3,[3]],
+["4161","นาผักขวง","ผข.","NPK",4,[3]],
+["4163","บางสะพานใหญ่","พญ.","BSY",2,[3]],
+["4165","ชะม่วง","ชว.","CMU",4,[3]],
+["4167","บางสะพานน้อย","พน.","BSN",2,[3]],
+["4169","ห้วยสัก","ยส.","HAS",3,[3]],
+["4172","เขาไชยราช","ขช.","KCR",3,[3]],
+["4175","มาบอำมฤต","มร.","MMR",3,[3]],
+["4178","คลองวังช้าง","คช.","KWC",4,[3]],
+["4179","ปะทิว","ะท.","PTI",2,[3]],
+["4181","บ้านคอกม้า","คา.","BKM",4,[3]],
+["4182","สะพลี","สี.","SPI",3,[3]],
+["4184","นาชะอัง","ชง.","NCA",4,[3]],
+["4186","ชุมพร","ชพ.","CUP",1,[3]],
+["4187","แสงแดด","สด.","SDA",4,[3]],
+["4189","ทุ่งคา","ทค.","TKA",4,[3]],
+["4191","วิสัย","ไส.","WSI",4,[3]],
+["4194","สวี","ะว.","SWI",2,[3]],
+["4196","เขาสวนทุเรียน","ขร.","KSU",3,[3]],
+["4199","ปากตะโก","ตก.","PAT",3,[3]],
+["4201","ควนหินมุ้ย","มย.","KHM",4,[3]],
+["4203","หลังสวน","งส.","LSU",2,[3]],
+["4205","คลองขนาน","คข.","KKN",4,[3]],
+["4208","ละแม","แม.","LMA",3,[3]],
+["4210","บ้านดวด","ดว.","BDU",4,[3]],
+["4212","คันธุลี","คล.","KTL",3,[3]],
+["4213","ดอนธูป","ดธ.","DOT",4,[3]],
+["4215","ท่าชนะ","นะ.","TCN",2,[3]],
+["4218","เขาพนมแบก","ขบ.","KPN",4,[3]],
+["4221","ไชยา","ชย.","CIY",2,[3]],
+["4224","ท่าฉาง","ทฉ.","TAC",3,[3]],
+["4226","คลองไทร","คไ.","KLS",4,[3]],
+["4227","มะลวน","ลว.","MLU",3,[3]],
+["4229","ชุมทางบ้านทุ่งโพธิ์","ทโ.","TPJ",3,[3]],
+["4239","สุราษฎร์ธานี","รท.","SRN",1,[3]],
+["4241","เขาหัวควาย","ขค.","KOH",3,[3]],
+["4245","เขาพลู","ขพ.","KOP",4,[3]],
+["4247","บ้านนา","นน.","BNA",2,[3]],
+["4249","ห้วยมุด","มด.","HMU",4,[3]],
+["4250","นาสาร","นส.","NSN",2,[3]],
+["4253","พรุพี","พพ.","PUP",4,[3]],
+["4255","บ้านส้อง","สอ.","BAS",2,[3]],
+["4257","บ้านพรุกระแชง","แช.","BKC",4,[3]],
+["4258","ห้วยปริก","หป.","HUP",4,[3]],
+["4259","กระเบียด","เบ.","KBI",4,[3]],
+["4261","ทานพอ","ทา.","TPO",3,[3]],
+["4262","ฉวาง","ฉว.","CAW",3,[3]],
+["4264","คลองจันดี","จด.","KCD",3,[3]],
+["4266","หลักช้าง","หช.","LAC",4,[3]],
+["4268","นาบอน","าอ.","NAB",3,[3]],
+["4269","คลองจัง","คจ.","KOC",4,[3]],
+["4270","ชุมทางทุ่งสง","ทส.","TSJ",1,[3]],
+["4295","ใสใหญ่","สใ.","SYI",4,[3]],
+["4297","ช่องเขา","ชข.","CKH",3,[3]],
+["4299","ร่อนพิบูลย์","รบ.","ROP",3,[3]],
+["4300","ชุมทางเขาชุมทอง","ชท.","KCJ",3,[3]],
+["4310","ควนหนองคว้า","คว.","KNK",4,[3]],
+["4312","บ้านตูล","ตน.","BAT",4,[3]],
+["4315","ชะอวด","ชด.","CHU",2,[3]],
+["4317","บ้านนางหลง","นล.","BNL",4,[3]],
+["4318","บ้านขอนหาด","ขห.","BHH",4,[3]],
+["4319","แหลมโตนด","โน.","LTN",4,[3]],
+["4321","ปากคลอง","ปค.","PKH",3,[3]],
+["4325","พัทลุง","พท.","PTL",2,[3]],
+["4328","บ้านต้นโดน","บโ.","BTD",4,[3]],
+["4330","เขาชัยสน","เช.","KCS",3,[3]],
+["4331","บางแก้ว","แก.","BAE",3,[3]],
+["4334","ควนเคี่ยม","คเ.","KUK",4,[3]],
+["4336","หารเทา","หท.","HAT",3,[3]],
+["4338","โคกทราย","โท.","KKS",4,[3]],
+["4340","ควนเนียง","เน.","KNN",3,[3]],
+["4342","บ้านเกาะใหญ่","กใ.","BYI",4,[3]],
+["4344","บางกล่ำ","บล.","BGM",3,[3]],
+["4345","บ้านดินลาน","ดล.","BDL",4,[3]],
+["4347","ชุมทางหาดใหญ่","หใ.","HYJ",1,[3]],
+["4377","นาม่วง","มง.","NMU",3,[3]],
+["4381","วัดควนมีด","วม.","WKM",4,[3]],
+["4384","จะนะ","จน.","CAN",2,[3]],
+["4386","ท่าแมงลัก","งก.","TML",4,[3]],
+["4388","เกาะสะบ้า","กส.","KSB",4,[3]],
+["4391","เทพา","เท.","TPA",2,[3]],
+["4393","ตาแปด","ตป.","TPE",4,[3]],
+["4395","ปัตตานี","นี.","PTN",1,[3]],
+["4397","นาประดู่","าด.","NPD",3,[3]],
+["4437","วัดช้างให้","ชห.","WCH",4,[3]],
+["4399","คลองทราย","คซ.","KOI",4,[3]],
+["4400","ตาเซะ","ตซ.","TAS",4,[3]],
+["4402","ยะลา","ยล.","YLA",1,[3]],
+["4405","ไม้แก่น","ไม.","MIK",4,[3]],
+["4408","รามัน","รั.","RMA",2,[3]],
+["4409","บาลอ","าล.","BAL",4,[3]],
+["4411","รือเสาะ","สะ.","RUS",2,[3]],
+["4414","ลาโละ","ลล.","LLO",4,[3]],
+["4416","มะรือโบ","โบ.","MRB",3,[3]],
+["4419","ตันหยงมัส","ยม.","TYM",2,[3]],
+["4421","ป่าไผ่","ปผ.","PAP",4,[3]],
+["4423","เจาะไอร้อง","จอ.","CIR",3,[3]],
+["4424","บูกิต","บู.","BUK",4,[3]],
+["4427","โต๊ะเด็ง","ตด.","TOD",4,[3]],
+["4428","สุไหงปาดี","งด.","SGP",2,[3]],
+["4432","สุไหงโก-ลก","โล.","SGK",1,[3]],
+["4368","คลองแงะ","คง.","KNG",3,[3]],
+["4373","ปาดังเบซาร์ (ไทย)","ปซ.๒","PBT",4,[3]],
+["4374","ปาดังเบซาร์","ปซ.","PBS",2,[3]],
+["4042","สุพรรณบุรี","สพ.","SPB",3,[3]],
+["4044","สระโกสินารายณ์","สโ.","SKS",4,[3]],
+["4045","ลูกแก","ลแ.","LUK",4,[3]],
+["4048","ท่าเรือน้อย","ทน.","TRN",3,[3]],
+["4051","ท่าม่วง","าม.","TMG",4,[3]],
+["4057","กาญจนบุรี","กญ.","KCB",2,[3]],
+["4063","วังเย็น","วย.","WYN",4,[3]],
+["4069","ท่ากิเลน","กน.","TKL",4,[3]],
+["4073","วังโพ","วง.","WAP",4,[3]],
+["4077","น้ำตก","าต.","NAT",3,[3]],
+["4238","คีรีรัฐนิคม","รค.","KRR",4,[3]],
+["4272","ที่วัง","ทว.","TWG",4,[3]],
+["4281","ห้วยยอด","ยอ.","HYO",2,[3]],
+["4289","ตรัง","ตร.","TRG",2,[3]],
+["4294","กันตัง","กต.","KAT",3,[3]],
+["4302","บ้านทุ่งหล่อ","ลอ.","BLO",4,[3]],
+["4303","โคกคราม","คค.","KKA",4,[3]],
+["4308","นครศรีธรรมราช","ธำ.","NST",2,[3]],
+["5001","วงเวียนใหญ่","งญ.","WWY",2,[4]],
+["5003","ตลาดพลู","ลู.","TLP",3,[4]],
+["5008","วัดสิงห์","สิ.","WTS",3,[4]],
+["5012","รางโพธิ์","รโ.","RPO",4,[4]],
+["5018","มหาชัย","ชั.","MHC",1,[4]],
+["5019","บ้านแหลม","แห.","BLA",4,[4]],
+["5032","แม่กลอง","แอ.","MKO",3,[4]]
+];
+var C2 = [
+ ['1.1',0,'☺ ขั้นสูง',2],['1.2',0,'☺ ขั้นสูง',2],['1.3',0,'☺ ขั้นสูง',2],
+ ['2.1',1,'♦ พื้นฐาน',1],['2.2',1,'♦ พื้นฐาน',1],['2.3',1,'♦ พื้นฐาน',1],['2.4',1,'☺ ขั้นสูง',2],['2.5',1,'☺ ขั้นสูง',2],['2.6',1,'☺ ขั้นสูง',2],['2.7',1,'☺ ขั้นสูง',2],['2.8',1,'♦ พื้นฐาน',1],['2.9',1,'♦ พื้นฐาน',1],['2.10',1,'☺ ขั้นสูง',2],['2.11',1,'☺ ขั้นสูง',2],['2.12',1,'♦ พื้นฐาน',1],['2.13',1,'☺ ขั้นสูง',2],['2.14',1,'☺ ขั้นสูง',2],['2.15',1,'☺ ขั้นสูง',2],['2.16',1,'☺ ขั้นสูง',2],['2.17',1,'♦ พื้นฐาน',1],['2.18',1,'☺ ขั้นสูง',2],
+ ['3.1',2,'♦ พื้นฐาน',1],['3.2',2,'☺ ขั้นสูง',2],['3.3',2,'☺ ขั้นสูง',2],['3.4',2,'☺ ขั้นสูง',2],['3.5',2,'☺ ขั้นสูง',2],
+ ['4.1',3,'☺ ขั้นสูง',2],['4.2',3,'☺ ขั้นสูง',2],['4.3',3,'☺ ขั้นสูง',2],['4.4',3,'☺ ขั้นสูง',2],['4.5',3,'☺ ขั้นสูง',2],
+ ['5.1',4,'เพิ่มเติม',2],['5.2',4,'เพิ่มเติม',2],['5.3',4,'เพิ่มเติม',3],['5.4',4,'เพิ่มเติม',2],['5.5',4,'เพิ่มเติม',2],
+ ['5.6',5,'เพิ่มเติม',1],['5.7',5,'เพิ่มเติม',1],['5.8',5,'เพิ่มเติม',1],['5.9',5,'เพิ่มเติม',1],['5.10',5,'เพิ่มเติม',1]
+];
+var LINE_NAMES = ['สายเหนือ', 'สายตะวันออกเฉียงเหนือ', 'สายตะวันออก', 'สายใต้', 'สายแม่กลอง'];
+var LEVELS = ['พื้นฐาน', 'ก้าวหน้า', 'เป็นเลิศ'];
+var STATUS_TXT = { pass:'ผ่านมาตรฐาน', fail:'ยังไม่ผ่านเกณฑ์', none:'ยังไม่เริ่มประเมิน' };
+var PAGE = 10, ITEMS_TOTAL = 15 + C2.length + 3;
+var S = { rows:[], status:'all', line:'all', sortBy:'attention', q:'', pg:0 };
+function esc(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){ return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]; }); }
+function norm(s){ return String(s || '').toLowerCase().replace(/[\s\.\-_()·]/g, ''); }
+function stFull(n){ return n.indexOf('สถานี') === 0 ? n : 'สถานี' + n; }
+
+function evaluate(items){
+  items = items || {};
+  var c1 = 0, c2 = 0, c3 = 0, basicDone = 0, basicN = 0, all = 0, ev = 0, i, it;
+  for(i = 1; i <= 15; i++){ it = items['1_' + i]; if(it && it.c){ c1++; all++; } if(it && it.e) ev++; }
+  C2.forEach(function(r){
+    var basic = r[2].indexOf('♦') > -1; if(basic) basicN++;
+    it = items['2_' + r[0]];
+    if(it && it.c){ c2 += r[3]; all++; if(basic) basicDone++; }
+    if(it && it.e) ev++;
+  });
+  for(i = 1; i <= 3; i++){ it = items['3_' + i]; if(it && it.c){ c3 += 10; all++; } if(it && it.e) ev++; }
+  var total = c2 + c3, gate = c1 === 15 && basicDone === basicN;
+  var level = !gate ? -1 : (total >= 90 ? 2 : (total >= 80 ? 1 : (total >= 70 ? 0 : -1)));
+  var started = all > 0 || ev > 0;
+  return { c1:c1, c2:c2, c3:c3, total:total, level:level, all:all, started:started, status: level >= 0 ? 'pass' : (started ? 'fail' : 'none') };
+}
+
+async function loadItems(){
+  var map = {}, mode = 'local', updated = null;
+  if(window.GeccDB && window.GeccDB.enabled){
+    await window.GeccDB.ready;
+    var rows = await window.GeccDB.loadAllAudit();
+    mode = 'db';
+    rows.forEach(function(r){
+      var m = map[r.station_code] || (map[r.station_code] = {});
+      m[r.crit + '_' + r.item_no] = { c:!!r.checked, e:!!((r.note || '').trim() || (r.drive_link || '').trim()) };
+      if(r.updated_at && (!updated || r.updated_at > updated)) updated = r.updated_at;
+    });
+  }else{
+    try{
+      for(var i = 0; i < localStorage.length; i++){
+        var k = localStorage.key(i);
+        if(k !== 'gecc-audit-state' && k.indexOf('gecc-audit-state:') !== 0) continue;
+        var code = k === 'gecc-audit-state' ? '1001' : k.split(':')[1];
+        if(k === 'gecc-audit-state' && localStorage.getItem('gecc-audit-state:1001')) continue;
+        var st = JSON.parse(localStorage.getItem(k) || '{}'), m2 = {};
+        Object.keys(st).forEach(function(key){ if(key === '__meta') return; var v = st[key] || {}; m2[key] = { c:!!v.checked, e:!!((v.note || '').trim() || (v.driveLink || '').trim() || (v.images && v.images.length)) }; });
+        map[code] = m2;
+      }
+    }catch(e){}
+  }
+  return { map:map, mode:mode, updated:updated };
+}
+
+function build(data){
+  S.rows = ST.map(function(r){
+    var e = evaluate(data.map[r[0]]);
+    return { code:r[0], name:r[1], abbr:r[2], abbrEn:r[3], cls:r[4], lines:r[5], e:e, keys:[norm(r[1]), norm('สถานี' + r[1]), r[0], norm(r[2]), norm(r[3])] };
+  });
+}
+function count(rows, st){ return rows.filter(function(r){ return r.e.status === st; }).length; }
+
+function renderKpis(){
+  var rows = S.rows, n = rows.length, p = count(rows, 'pass'), f = count(rows, 'fail'), z = count(rows, 'none');
+  function pct(x){ return n ? (x / n * 100).toFixed(1) + '% ของทั้งหมด' : ''; }
+  document.getElementById('k-total').textContent = n.toLocaleString('en-US');
+  document.getElementById('k-pass').textContent = p; document.getElementById('k-pass-d').textContent = pct(p);
+  document.getElementById('k-fail').textContent = f; document.getElementById('k-fail-d').textContent = pct(f);
+  document.getElementById('k-none').textContent = z; document.getElementById('k-none-d').textContent = pct(z);
+  var started = rows.filter(function(r){ return r.e.started; });
+  var avg = started.length ? started.reduce(function(s, r){ return s + r.e.total; }, 0) / started.length : 0;
+  document.getElementById('avg-score').textContent = started.length ? avg.toFixed(1) : '–';
+  document.getElementById('avg-bar').style.width = Math.round(avg) + '%';
+  document.getElementById('avg-sub').textContent = started.length ? 'เฉลี่ยจาก ' + started.length + ' สถานีที่เริ่มประเมินแล้ว' : 'ยังไม่มีสถานีที่เริ่มประเมิน';
+  [0, 1, 2].forEach(function(l){ document.getElementById('lv-' + l).textContent = rows.filter(function(r){ return r.e.level === l; }).length; });
+}
+function renderBoard(){
+  var h = '';
+  LINE_NAMES.forEach(function(nm, li){
+    var sts = S.rows.filter(function(r){ return r.lines.indexOf(li) > -1; });
+    var p = count(sts, 'pass'), f = count(sts, 'fail'), z = count(sts, 'none'), n = sts.length || 1;
+    var started = sts.filter(function(r){ return r.e.started; });
+    var avg = started.length ? (started.reduce(function(s, r){ return s + r.e.total; }, 0) / started.length).toFixed(1) : '–';
+    h += '<div class="dz-line"><div class="dz-line-h"><b>' + nm + '</b><span>' + sts.length + ' สถานี · ผ่าน ' + p + ' · ยังไม่ผ่าน ' + f + ' · ยังไม่เริ่ม ' + z + ' · คะแนนเฉลี่ย ' + avg + '</span></div>' +
+      '<div class="dz-bar"><i class="pass" style="width:' + (p / n * 100) + '%"></i><i class="fail" style="width:' + (f / n * 100) + '%"></i><i class="none" style="width:' + (z / n * 100) + '%"></i></div>' +
+      '<div class="dz-dots">' + sts.map(function(r){
+        var tip = r.name + ' (' + r.code + ') · ' + STATUS_TXT[r.e.status] + (r.e.started ? ' · ' + r.e.total + '/100' : '');
+        return '<a class="' + r.e.status + '" href="gecc-station.html?id=' + r.code + '" title="' + esc(tip) + '"></a>';
+      }).join('') + '</div></div>';
+  });
+  document.getElementById('dz-board').innerHTML = h;
+}
+function filtered(){
+  var q = norm(S.q);
+  var list = S.rows.filter(function(r){
+    if(S.line !== 'all' && r.lines.indexOf(S.line) === -1) return false;
+    if(S.status !== 'all' && r.e.status !== S.status) return false;
+    return !q || r.keys.some(function(k){ return k.indexOf(q) > -1; });
+  });
+  var order = { fail:0, none:1, pass:2 };
+  var idx = {}; ST.forEach(function(r, i){ idx[r[0]] = i; });
+  if(S.sortBy === 'low') list.sort(function(a, b){ return a.e.total - b.e.total || idx[a.code] - idx[b.code]; });
+  else if(S.sortBy === 'high') list.sort(function(a, b){ return b.e.total - a.e.total || idx[a.code] - idx[b.code]; });
+  else if(S.sortBy === 'attention') list.sort(function(a, b){ return order[a.e.status] - order[b.e.status] || (a.e.status === 'none' ? idx[a.code] - idx[b.code] : a.e.total - b.e.total || idx[a.code] - idx[b.code]); });
+  if(q){
+    var rk = function(r){ if(r.code === q || norm(r.abbr) === q || norm(r.abbrEn) === q || r.keys[0] === q) return 0; if(r.keys[0].indexOf(q) === 0 || norm(r.abbrEn).indexOf(q) === 0) return 1; return 2; };
+    list = list.map(function(r, i){ return { r:r, i:i, k:rk(r) }; }).sort(function(x, y){ return x.k - y.k || x.i - y.i; }).map(function(x){ return x.r; });
+  }
+  return list;
+}
+function renderTable(){
+  var q = norm(S.q);
+  var base = S.rows.filter(function(r){ return (S.line === 'all' || r.lines.indexOf(S.line) > -1) && (!q || r.keys.some(function(k){ return k.indexOf(q) > -1; })); });
+  document.getElementById('dz-chips').innerHTML = [['all', 'ทั้งหมด', base.length], ['pass', 'ผ่านมาตรฐาน', count(base, 'pass')], ['fail', 'ยังไม่ผ่านเกณฑ์', count(base, 'fail')], ['none', 'ยังไม่เริ่มประเมิน', count(base, 'none')]].map(function(c){
+    return '<button class="dz-chip' + (S.status === c[0] ? ' active' : '') + '" onclick="dz.status(\'' + c[0] + '\')">' + c[1] + '<span class="n">' + c[2] + '</span></button>';
+  }).join('');
+  var list = filtered(), pages = Math.max(1, Math.ceil(list.length / PAGE));
+  S.pg = Math.min(Math.max(0, S.pg), pages - 1);
+  var from = S.pg * PAGE, slice = list.slice(from, from + PAGE);
+  document.getElementById('dz-body').innerHTML = slice.length ? slice.map(function(r){
+    var e = r.e;
+    return '<tr onclick="location.href=\'gecc-station.html?id=' + r.code + '\'"><td class="nm"><b>' + esc(stFull(r.name)) + '</b><span>' + r.code + ' · ' + esc(r.abbr) + ' · ' + esc(r.abbrEn) + '</span></td>' +
+      '<td class="hide-s" style="font-size:12px;color:var(--text-dim)">' + r.lines.map(function(i){ return LINE_NAMES[i]; }).join(', ') + '</td>' +
+      '<td><span class="dz-st ' + e.status + '">' + STATUS_TXT[e.status] + '</span></td>' +
+      '<td class="hide-s">' + (e.level >= 0 ? LEVELS[e.level] : '—') + '</td>' +
+      '<td class="num hide-s">' + (e.started ? e.c1 + '/15' : '—') + '</td><td class="num hide-s">' + (e.started ? e.c2 + '/70' : '—') + '</td><td class="num hide-s">' + (e.started ? e.c3 + '/30' : '—') + '</td>' +
+      '<td class="tot">' + (e.started ? e.total + ' / 100' : '—') + '</td>' +
+      '<td class="num hide-s">' + (e.started ? e.all + '/' + ITEMS_TOTAL : '—') + '</td></tr>';
+  }).join('') : '<tr><td colspan="9" style="text-align:center;color:var(--text-faint);padding:26px">ไม่พบสถานีที่ตรงกับเงื่อนไข</td></tr>';
+  document.getElementById('dz-count').textContent = list.length ? 'แสดง ' + (from + 1) + '–' + (from + slice.length) + ' จาก ' + list.length + ' สถานี' : 'ไม่พบสถานี';
+  document.getElementById('dz-pg').textContent = 'หน้า ' + (S.pg + 1) + ' / ' + pages;
+  document.getElementById('dz-prev').disabled = S.pg <= 0;
+  document.getElementById('dz-next').disabled = S.pg >= pages - 1;
+  var nxt = Math.min(PAGE, list.length - (from + PAGE));
+  document.getElementById('dz-next').textContent = nxt > 0 ? 'ถัดไป ' + nxt + ' ›' : 'ถัดไป ›';
+}
+function thDate(d){
+  try{ return d.toLocaleString('th-TH', { timeZone:'Asia/Bangkok', day:'numeric', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' }) + ' น.'; }catch(e){ return d.toISOString(); }
+}
+async function load(){
+  var err = document.getElementById('dz-err');
+  try{
+    var data = await loadItems();
+    build(data);
+    err.innerHTML = '';
+    document.getElementById('dz-source').innerHTML = data.mode === 'db'
+      ? '☁ ข้อมูลจากฐานข้อมูลกลาง — คะแนนคำนวณจากผลการประเมินตนเองจริงของทุกสถานี (รีเฟรชอัตโนมัติทุก 1 นาที) <button class="dz-refresh" onclick="dz.reload()">↻ รีเฟรชตอนนี้</button>'
+      : '💾 ข้อมูลจากเบราว์เซอร์เครื่องนี้ — ยังไม่ได้เชื่อมฐานข้อมูลกลาง จึงเห็นเฉพาะสถานีที่บันทึกผลประเมินไว้ในเครื่องนี้ (สถานีอื่นขึ้นว่ายังไม่เริ่มประเมิน)';
+    document.getElementById('dz-updated').innerHTML = 'อัปเดตล่าสุด<br>' + thDate(data.updated ? new Date(data.updated) : new Date());
+    renderKpis(); renderBoard(); renderTable();
+  }catch(e){
+    err.innerHTML = '<div class="dz-err">โหลดข้อมูลจากฐานข้อมูลกลางไม่สำเร็จ: ' + esc(e && e.message || e) + ' · <a href="gecc-check.html">ตรวจสอบการเชื่อมต่อ</a></div>';
+    if(!S.rows.length){ build({ map:{} }); renderKpis(); renderBoard(); renderTable(); }
+  }
+}
+window.dz = {
+  search: function(v){ S.q = v; S.pg = 0; renderTable(); },
+  status: function(v){ S.status = v; S.pg = 0; renderTable(); },
+  line: function(v){ S.line = v === 'all' ? 'all' : parseInt(v, 10); S.pg = 0; renderTable(); },
+  sort: function(v){ S.sortBy = v; S.pg = 0; renderTable(); },
+  page: function(d){ S.pg += d; renderTable(); },
+  reload: load
+};
+document.getElementById('dz-line').innerHTML += LINE_NAMES.map(function(n, i){ return '<option value="' + i + '">' + n + '</option>'; }).join('');
+if(window.GeccDB && window.GeccDB.enabled && window.GeccDB.me === null){ /* guard handles redirect */ }
+load();
+setInterval(function(){ if(window.GeccDB && window.GeccDB.enabled && !document.hidden) load(); }, 60000);
+})();
 </script>
 <!--GECC_CHAT_START-->
 <script>
