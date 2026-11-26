@@ -188,6 +188,32 @@
     box-shadow: 0 14px 30px -10px rgba(17,19,39,0.6);
   }
 
+
+  /* ===== real login history ===== */
+  .lg-panel{ background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:18px 20px; margin-bottom:22px; box-shadow:0 2px 8px -2px rgba(20,20,50,0.08); }
+  .lg-head{ display:flex; justify-content:space-between; align-items:flex-start; gap:12px; flex-wrap:wrap; margin-bottom:12px; }
+  .lg-head h2{ font-size:16px; margin:0 0 3px; } .lg-head p{ margin:0; font-size:12.5px; color:var(--text-dim); max-width:640px; }
+  .lg-kpis{ display:flex; gap:12px; flex-wrap:wrap; margin-bottom:14px; }
+  .lg-kpi{ flex:1; min-width:150px; border:1px solid var(--border); border-radius:12px; padding:9px 14px; background:var(--surface-alt); }
+  .lg-kpi .l{ font-size:11.5px; color:var(--text-dim); } .lg-kpi .v{ font-size:18px; font-weight:700; margin-top:1px; }
+  .lg-tools{ display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-bottom:12px; }
+  .lg-in, .lg-sel{ font-family:var(--font-th); font-size:13px; padding:8px 12px; border:1px solid var(--input-border); border-radius:10px; background:var(--surface-alt); color:var(--text-strong); }
+  .lg-in{ min-width:230px; flex:1; max-width:320px; }
+  .lg-chip{ font-family:var(--font-th); font-size:12px; padding:5px 12px; border-radius:20px; border:1px solid var(--input-border); background:var(--surface); color:var(--text-dim); cursor:pointer; }
+  .lg-chip.active{ background:var(--ink); color:var(--cream); border-color:var(--ink); }
+  .lg-table{ width:100%; border-collapse:collapse; font-size:13px; }
+  .lg-table th{ text-align:left; font-size:11.5px; color:var(--text-dim); padding:9px 10px; border-bottom:1px solid var(--border); white-space:nowrap; }
+  .lg-table td{ padding:10px; border-bottom:1px solid var(--divider); vertical-align:middle; }
+  .lg-table .tm b{ display:block; font-family:var(--font-mono); font-size:13px; } .lg-table .tm span{ font-size:11px; color:var(--text-faint); }
+  .lg-table .who b{ display:block; } .lg-table .who span{ font-size:11px; color:var(--text-faint); font-family:var(--font-mono); }
+  .lg-pill{ font-size:11px; font-weight:600; padding:2px 10px; border-radius:20px; white-space:nowrap; }
+  .lg-pill.staff{ background:rgba(16,185,129,.14); color:var(--good); } .lg-pill.officer{ background:rgba(255,176,32,.2); color:var(--amber-dim); }
+  .lg-pager{ display:flex; justify-content:space-between; align-items:center; gap:10px; margin-top:12px; font-size:12px; color:var(--text-dim); }
+  .lg-pager button{ font-family:var(--font-th); font-size:12.5px; font-weight:600; padding:6px 14px; border-radius:20px; border:1px solid var(--input-border); background:var(--surface); color:var(--text-strong); cursor:pointer; }
+  .lg-pager button:disabled{ opacity:.4; cursor:default; }
+  .lg-note{ font-size:12px; color:var(--text-dim); margin:0 0 12px; padding:9px 14px; border:1px dashed var(--input-border); border-radius:12px; background:var(--surface-alt); }
+  .lg-err{ background:rgba(239,68,68,.1); border:1px solid rgba(239,68,68,.4); color:var(--signal); border-radius:12px; padding:10px 14px; margin-bottom:12px; font-size:13px; }
+  @media (max-width:820px){ .lg-table .hide-s{ display:none; } }
 </style>
 <!--GECC_BACKEND_START-->
 <script>document.write('<script src="gecc-config.js?t=' + Date.now() + '"><\/script>')</script>
@@ -265,6 +291,7 @@ GeccDB.signIn = async function(username, password, expectRole){
   if(!m || m.noProfile){ await sb.auth.signOut(); GeccDB.me = null; return { ok:false, error:'noprofile' }; }
   if(expectRole && m.role !== expectRole){ await sb.auth.signOut(); GeccDB.me = null; return { ok:false, error:'role' }; }
   GeccDB.syncLocal(m);
+  try{ await sb.rpc('log_login', { p_agent:String(navigator.userAgent || '').slice(0, 300) }); }catch(e){}
   return { ok:true, me:m };
 };
 
@@ -442,6 +469,47 @@ GeccDB.clearPasswords = async function(){
   var r = await sb.rpc('admin_clear_passwords');
   if(r.error) throw r.error;
 };
+/* all audit items of all stations (officers only) — pages through the 1000-row limit of the API */
+/* number of evidence photos per station (officers only) */
+GeccDB.loadAuditImageCounts = async function(){
+  var counts = {}, from = 0, size = 1000;
+  for(;;){
+    var r = await sb.from('audit_images').select('station_code')
+      .order('station_code', { ascending:true }).order('created_at', { ascending:true }).order('id', { ascending:true }).range(from, from + size - 1);
+    if(r.error) throw r.error;
+    var d = r.data || [];
+    d.forEach(function(x){ counts[x.station_code] = (counts[x.station_code] || 0) + 1; });
+    if(d.length < size || from > 200000) break;
+    from += size;
+  }
+  return counts;
+};
+/* login history, newest first (officers see everyone, a station user only sees their own) */
+GeccDB.loadLogins = async function(){
+  var out = [], from = 0, size = 1000;
+  for(;;){
+    var r = await sb.from('login_events').select('*').order('logged_in_at', { ascending:false }).order('id', { ascending:false }).range(from, from + size - 1);
+    if(r.error) throw r.error;
+    var d = r.data || [];
+    out = out.concat(d);
+    if(d.length < size || out.length >= 5000) break;
+    from += size;
+  }
+  return out;
+};
+GeccDB.loadAllAudit = async function(){
+  var out = [], from = 0, size = 1000;
+  for(;;){
+    var r = await sb.from('audit_items').select('station_code,crit,item_no,checked,note,drive_link,updated_at')
+      .order('station_code', { ascending:true }).order('crit', { ascending:true }).order('item_no', { ascending:true }).range(from, from + size - 1);
+    if(r.error) throw r.error;
+    var d = r.data || [];
+    out = out.concat(d);
+    if(d.length < size || from > 200000) break;
+    from += size;
+  }
+  return out;
+};
 
 /* ---------- connection chip (bottom-left) + account popover ---------- */
 function mountChip(){
@@ -543,6 +611,29 @@ if(document.body) mountChip(); else document.addEventListener('DOMContentLoaded'
     <div class="kpi-card"><div class="label">การเปลี่ยนแปลงบัญชีผู้ใช้งาน</div><div class="value" id="kpi-account">0</div></div>
     <div class="kpi-card"><div class="label">กิจกรรมด้านตรวจประเมิน</div><div class="value" id="kpi-audit">0</div></div>
   </div>
+
+  <div class="lg-panel">
+    <div class="lg-head">
+      <div><h2>ประวัติการเข้าสู่ระบบ (ข้อมูลจริง)</h2><p id="lg-sub">บันทึกทุกครั้งที่นายสถานีหรือเจ้าหน้าที่ล็อกอิน พร้อมวันและเวลา</p></div>
+      <button class="export-btn" onclick="lg.csv()">⬇ ส่งออกประวัติล็อกอิน (CSV)</button>
+    </div>
+    <div id="lg-err"></div>
+    <div class="lg-kpis">
+      <div class="lg-kpi"><div class="l">ล็อกอินทั้งหมด</div><div class="v" id="lg-k-all">–</div></div>
+      <div class="lg-kpi"><div class="l">ล็อกอินวันนี้</div><div class="v" id="lg-k-today">–</div></div>
+      <div class="lg-kpi"><div class="l">ผู้ใช้ที่ล็อกอินวันนี้ (ไม่นับซ้ำ)</div><div class="v" id="lg-k-users">–</div></div>
+      <div class="lg-kpi"><div class="l">ล็อกอินล่าสุด</div><div class="v" id="lg-k-last" style="font-size:13.5px">–</div></div>
+    </div>
+    <div class="lg-tools">
+      <input class="lg-in" id="lg-q" placeholder="ค้นหา ชื่อ / รหัสผู้ใช้ / สถานี" oninput="lg.search(this.value)">
+      <span id="lg-chips" style="display:flex;gap:6px;flex-wrap:wrap"></span>
+      <select class="lg-sel" id="lg-range" onchange="lg.range(this.value)"><option value="all">ทุกช่วงเวลา</option><option value="today">วันนี้</option><option value="7">7 วันล่าสุด</option><option value="30">30 วันล่าสุด</option></select>
+    </div>
+    <table class="lg-table"><thead><tr><th>วันและเวลาที่ล็อกอิน</th><th>ผู้ล็อกอิน</th><th>บทบาท</th><th>สถานี</th><th class="hide-s">อุปกรณ์</th></tr></thead><tbody id="lg-body"></tbody></table>
+    <div class="lg-pager"><span id="lg-count"></span><span><button id="lg-prev" onclick="lg.page(-1)">‹ ก่อนหน้า</button> <span id="lg-pg"></span> <button id="lg-next" onclick="lg.page(1)">ถัดไป 10 ›</button></span></div>
+  </div>
+
+  <div class="lg-note">กิจกรรมด้านล่าง (บัญชีผู้ใช้ ตรวจประเมิน ข้อร้องเรียน ระบบ) ยังเป็นข้อมูลตัวอย่าง ส่วน “ประวัติการเข้าสู่ระบบ” ด้านบนเป็นข้อมูลจริงที่บันทึกทุกครั้งที่มีการล็อกอิน</div>
 
   <div class="toolbar">
     <input type="text" placeholder="ค้นหาชื่อผู้ใช้งานหรือคำในรายละเอียด..." oninput="setSearch(this.value)">
@@ -660,9 +751,7 @@ document.addEventListener('click', function(e){
 
 <script>
 const LOGS = [
-  { id:'l1',  time:'19 ก.ย. 09:12', actor:'สมชาย ใจดี',        type:'account',  icon:'🔑', action:'เข้าสู่ระบบ',                 detail:'เข้าสู่ระบบในฐานะเจ้าหน้าที่สถานี BKK-004' },
   { id:'l2',  time:'19 ก.ย. 09:15', actor:'สมชาย ใจดี',        type:'audit',    icon:'📎', action:'อัปโหลดหลักฐาน',              detail:'แนบหลักฐาน "ทางลาดผู้พิการ" ที่สถานีกรุงเทพ (หัวลำโพง)' },
-  { id:'l3',  time:'19 ก.ย. 08:40', actor:'กรรณิการ์ ตรวจสอบดี', type:'account',  icon:'🔑', action:'เข้าสู่ระบบ',                 detail:'เข้าสู่ระบบในฐานะคณะกรรมการ/ผู้บริหาร' },
   { id:'l4',  time:'19 ก.ย. 08:55', actor:'กรรณิการ์ ตรวจสอบดี', type:'account',  icon:'⚙️', action:'ระงับบัญชีผู้ใช้งาน',           detail:'ระงับบัญชี "ประยุทธ อีสานรุ่ง" (NMA-022) ชั่วคราว' },
   { id:'l5',  time:'18 ก.ย. 16:40', actor:'ระบบ',              type:'feedback', icon:'💬', action:'มีเรื่องร้องเรียนใหม่',         detail:'ผู้โดยสารแจ้งปัญหาห้องน้ำสกปรกที่สถานีหาดใหญ่' },
   { id:'l6',  time:'18 ก.ย. 14:05', actor:'ธนกร อยุธยาเก่า',    type:'audit',    icon:'✅', action:'ส่งหลักฐานครบถ้วน',            detail:'สถานีอยุธยาอัปโหลดหลักฐานครบ 100% พร้อมส่งตรวจ' },
@@ -714,8 +803,8 @@ function render(){
     `).join('');
   }
 
-  document.getElementById('kpi-total').textContent = LOGS.length;
-  document.getElementById('kpi-login').textContent = LOGS.filter(l => l.action === 'เข้าสู่ระบบ').length;
+  document.getElementById('kpi-total').textContent = LOGS.length + (window.__loginCount || 0);
+  document.getElementById('kpi-login').textContent = window.__loginCount != null ? window.__loginCount : 0;
   document.getElementById('kpi-account').textContent = LOGS.filter(l => l.type === 'account').length;
   document.getElementById('kpi-audit').textContent = LOGS.filter(l => l.type === 'audit').length;
 }
@@ -834,6 +923,108 @@ document.addEventListener('keydown', function(e){
     closeSearch();
   }
 });
+</script>
+<script>
+// ===================== real login history =====================
+(function(){
+var STN = {"1001":"กรุงเทพ","1004":"สามเสน","1007":"ชุมทางบางซื่อ","1000":"สถานีกลางกรุงเทพอภิวัฒน์","1011":"บางเขน","1015":"หลักสี่","1017":"ดอนเมือง","1021":"รังสิต","1022":"เชียงราก","1024":"เชียงรากน้อย","1026":"คลองพุทรา","1028":"บางปะอิน","1029":"บ้านโพ","1031":"อยุธยา","1032":"บ้านม้า","1033":"มาบพระจันทร์","1035":"พระแก้ว","1036":"ชุมทางบ้านภาชี","1037":"หนองวิวัฒน์","1039":"ท่าเรือ","1041":"บ้านหมอ","1045":"หนองโดน","1047":"บ้านกลับ","1048":"บ้านป่าหวาย","1050":"ลพบุรี","1051":"ท่าแค","1053":"โคกกะเทียม","1055":"หนองเต่า","1056":"หนองทรายขาว","1058":"บ้านหมี่","1061":"จันเสน","1063":"ช่องแค","1066":"โพนทอง","1067":"บ้านตาคลี","1069":"ดงมะกุ","1070":"หัวหวาย","1072":"หนองโพ","1074":"หัวงิ้ว","1076":"เนินมะกอก","1079":"เขาทอง","1082":"นครสวรรค์","1083":"ปากน้ำโพ","1226":"บึงบอระเพ็ด","1084":"ทับกฤช","1086":"คลองปลากด","1088":"ชุมแสง","1091":"วังกร่าง","1093":"บางมูลนาก","1095":"หอไกร","1097":"ดงตะขบ","1099":"ตะพานหิน","1101":"ห้วยเกตุ","1103":"หัวดง","1105":"วังกรด","1107":"พิจิตร","1109":"ท่าฬ่อ","1111":"บางกระทุ่ม","1112":"แม่เทียบ","1114":"บ้านใหม่","1116":"บึงพระ","1118":"พิษณุโลก","1119":"บ้านเต็งหนาม","1121":"บ้านตูม","1122":"แควน้อย","1125":"พรหมพิราม","1127":"หนองตม","1130":"บ้านบุ่ง","1131":"บ้านโคน","1134":"พิชัย","1136":"ไร่อ้อย","1137":"ชุมทางบ้านดารา","1144":"ท่าสัก","1146":"ตรอน","1148":"วังกะพี้","1150":"อุตรดิตถ์","1151":"ศิลาอาสน์","1154":"บ้านด่าน","1157":"ปางต้นผึ้ง","1160":"ห้วยไร่","1164":"เด่นชัย","1165":"ปากปาน","1167":"แก่งหลวง","1172":"บ้านปิน","1176":"ผาคัน","1180":"ปางป๋วย","1182":"แม่จาง","1184":"แม่เมาะ","1187":"ศาลาผาลาด","1189":"แม่ทะ","1192":"หนองวัวเฒ่า","1193":"นครลำปาง","1196":"ห้างฉัตร","1198":"ปางม่วง","1201":"แม่ตานน้อย","1204":"ขุนตาน","1206":"ทาชมภู","1208":"ศาลาแม่ทา","1212":"หนองหล่ม","1216":"ลำพูน","1218":"ป่าเส้า","1220":"สารภี","1222":"เชียงใหม่","1139":"คลองมะพลับ","1143":"สวรรคโลก","2001":"หนองกวย","2002":"หนองแซง","2004":"หนองสีดา","2005":"บ้านป๊อกแป๊ก","2007":"สระบุรี","2009":"ชุมทางหนองบัว","2011":"ชุมทางแก่งคอย","2082":"มาบกะเบา","2083":"ผาเสด็จ","2084":"หินลับ","2086":"มวกเหล็ก","2088":"กลางดง","2089":"ปางอโศก","2091":"บันไดม้า","2093":"ปากช่อง","2095":"ซับม่วง","2096":"จันทึก","2097":"คลองขนานจิตร","2100":"คลองไผ่","2101":"ลาดบัวขาว","2102":"บ้านใหม่สำโรง","2103":"หนองน้ำขุ่น","2105":"สีคิ้ว","2107":"สูงเนิน","2109":"กุดจิก","2111":"โคกกรวด","2113":"ภูเขาลาด","2114":"นครราชสีมา","2115":"ชุมทางถนนจิระ","2211":"บ้านพะเนา","2213":"ท่าช้าง","2215":"หนองมโนรมย์","2217":"จักราช","2220":"บ้านหินโคน","2222":"หินดาษ","2224":"ห้วยแถลง","2227":"หนองกระทิง","2229":"ลำปลายมาศ","2231":"ทะเมนชัย","2233":"บ้านแสลงพัน","2234":"บ้านหนองตาด","2236":"บุรีรัมย์","2239":"ห้วยราช","2243":"กระสัง","2244":"หนองเต็ง","2246":"ลำชี","2248":"สุรินทร์","2250":"บุฤาษี","2252":"เมืองที","2254":"กะโดนค้อ","2256":"ศีขรภูมิ","2258":"บ้านกะลัน","2261":"สำโรงทาบ","2264":"ห้วยทับทัน","2267":"อุทุมพรพิสัย","2270":"บ้านเนียม","2273":"ศรีสะเกษ","2277":"หนองแวง","2279":"บ้านคล้อ","2281":"กันทรารมย์","2285":"ห้วยขยุง","2288":"บุ่งหวาย","2290":"อุบลราชธานี","2117":"บ้านเกาะ","2120":"บ้านกระโดน","2121":"หนองแมว","2122":"โนนสูง","2124":"บ้านดงพลอง","2126":"บ้านมะค่า","2128":"พลสงคราม","2129":"บ้านดอนใหญ่","2131":"เมืองคง","2133":"โนนทองหลาง","2136":"ชุมทางบัวใหญ่","2139":"หนองบัวลาย","2142":"หนองมะเขือ","2144":"เมืองพล","2149":"บ้านหัน","2152":"บ้านไผ่","2156":"บ้านแฮด","2160":"ท่าพระ","2163":"ขอนแก่น","2166":"สำราญ","2170":"โนนพะยอม","2172":"น้ำพอง","2174":"ห้วยเสียว","2177":"เขาสวนกวาง","2181":"โนนสะอาด","2183":"ห้วยเกิ้ง","2186":"กุมภวาปี","2188":"ห้วยสามพาด","2190":"หนองตะไก้","2194":"หนองขอนกว้าง","2195":"อุดรธานี","2201":"นาพู่","2207":"นาทา","2209":"หนองคาย","2012":"บ้านช่องใต้","2017":"หินซ้อน","2020":"แก่งเสือเต้น","2024":"โคกสลุง","2026":"สุรนารายณ์","2033":"ลำนารายณ์","2038":"แผ่นดินทอง","2042":"โคกคลี","2045":"ช่องสำราญ","2049":"บ้านวะตะแบก (เทพสถิต)","2052":"ห้วยยายจิ๋ว","2057":"บำเหน็จณรงค์","2062":"จัตุรัส","2066":"หนองฉิม","2072":"บ้านเหลื่อม","2076":"หนองพลวง","3001":"มักกะสัน","3009":"คลองตัน","3010":"หัวหมาก","3012":"บ้านทับช้าง","3014":"ลาดกระบัง","3015":"หัวตะเข้","3017":"คลองหลวงแพ่ง","3019":"คลองเปรง","3021":"คลองบางพระ","3023":"ชุมทางฉะเชิงเทรา","3055":"บางน้ำเปรี้ยว","3057":"ชุมทางคลองสิบเก้า","3059":"โยทะกา","3061":"บ้านสร้าง","3064":"บ้านปากพลี","3066":"ปราจีนบุรี","3068":"โคกมะกอก","3070":"ประจันตคาม","3072":"บ้านดงบัง","3075":"กบินทร์บุรี","3078":"หนองสัง","3083":"บ้านแก้ง","3087":"สระแก้ว","3094":"วัฒนานคร","3100":"อรัญประเทศ","3130":"ด่านพรมแดนบ้านคลองลึก","3118":"องครักษ์","3120":"วิหารแดง","3121":"บุใหญ่","3122":"ชุมทางบ้านไผ่นาบุญ","3026":"ดอนสีนนท์","3029":"พานทอง","3032":"ชลบุรี","3034":"บางพระ","3036":"ชุมทางศรีราชา","3039":"บางละมุง","3041":"พัทยา","3043":"บ้านห้วยขวาง","3045":"ชุมทางเขาชีจรรย์","3047":"บ้านพลูตาหลวง","3048":"อู่ตะเภา","3049":"จุกเสม็ด","3110":"บ้านฉาง","3115":"มาบตาพุด","3002":"แม่น้ำ","4005":"บางบำหรุ","4004":"ชุมทางตลิ่งชัน","4002":"ธนบุรี","4008":"ศาลาธรรมสพน์","4009":"ศาลายา","4010":"วัดสุวรรณ","4012":"วัดงิ้วราย","4013":"นครชัยศรี","4014":"ท่าแฉลบ","4015":"ต้นสำโรง","4016":"นครปฐม","4018":"โพรงมะเดื่อ","4019":"คลองบางตาล","4020":"ชุมทางหนองปลาดุก","4079":"บ้านโป่ง","4081":"นครชุมน์","4082":"คลองตาคด","4083":"โพธาราม","4085":"เจ็ดเสมียน","4087":"บ้านกล้วย","4089":"ราชบุรี","4090":"บ้านคูบัว","4091":"บ่อตะคร้อ","4093":"ปากท่อ","4095":"บางเค็ม","4097":"เขาย้อย","4098":"หนองปลาไหล","4099":"บางจาก","4101":"เพชรบุรี","4104":"เขาทโมน","4105":"หนองไม้เหลือง","4107":"หนองจอก","4108":"หนองศาลา","4111":"ชะอำ","4114":"ห้วยทรายเหนือ","4115":"ห้วยทรายใต้","4118":"หัวหิน","4119":"หนองแก","4120":"สวนสนประดิพัทธ์","4121":"เขาเต่า","4123":"วังก์พง","4124":"ปราณบุรี","4126":"หนองคาง","4128":"สามร้อยยอด","4130":"สามกระทาย","4133":"กุยบุรี","4135":"บ่อนอก","4138":"ทุ่งมะเม่า","4140":"คั่นกระได","4142":"ประจวบคีรีขันธ์","4146":"วังด้วน","4149":"ห้วยยาง","4153":"ทับสะแก","4158":"บ้านกรูด","4161":"นาผักขวง","4163":"บางสะพานใหญ่","4165":"ชะม่วง","4167":"บางสะพานน้อย","4169":"ห้วยสัก","4172":"เขาไชยราช","4175":"มาบอำมฤต","4178":"คลองวังช้าง","4179":"ปะทิว","4181":"บ้านคอกม้า","4182":"สะพลี","4184":"นาชะอัง","4186":"ชุมพร","4187":"แสงแดด","4189":"ทุ่งคา","4191":"วิสัย","4194":"สวี","4196":"เขาสวนทุเรียน","4199":"ปากตะโก","4201":"ควนหินมุ้ย","4203":"หลังสวน","4205":"คลองขนาน","4208":"ละแม","4210":"บ้านดวด","4212":"คันธุลี","4213":"ดอนธูป","4215":"ท่าชนะ","4218":"เขาพนมแบก","4221":"ไชยา","4224":"ท่าฉาง","4226":"คลองไทร","4227":"มะลวน","4229":"ชุมทางบ้านทุ่งโพธิ์","4239":"สุราษฎร์ธานี","4241":"เขาหัวควาย","4245":"เขาพลู","4247":"บ้านนา","4249":"ห้วยมุด","4250":"นาสาร","4253":"พรุพี","4255":"บ้านส้อง","4257":"บ้านพรุกระแชง","4258":"ห้วยปริก","4259":"กระเบียด","4261":"ทานพอ","4262":"ฉวาง","4264":"คลองจันดี","4266":"หลักช้าง","4268":"นาบอน","4269":"คลองจัง","4270":"ชุมทางทุ่งสง","4295":"ใสใหญ่","4297":"ช่องเขา","4299":"ร่อนพิบูลย์","4300":"ชุมทางเขาชุมทอง","4310":"ควนหนองคว้า","4312":"บ้านตูล","4315":"ชะอวด","4317":"บ้านนางหลง","4318":"บ้านขอนหาด","4319":"แหลมโตนด","4321":"ปากคลอง","4325":"พัทลุง","4328":"บ้านต้นโดน","4330":"เขาชัยสน","4331":"บางแก้ว","4334":"ควนเคี่ยม","4336":"หารเทา","4338":"โคกทราย","4340":"ควนเนียง","4342":"บ้านเกาะใหญ่","4344":"บางกล่ำ","4345":"บ้านดินลาน","4347":"ชุมทางหาดใหญ่","4377":"นาม่วง","4381":"วัดควนมีด","4384":"จะนะ","4386":"ท่าแมงลัก","4388":"เกาะสะบ้า","4391":"เทพา","4393":"ตาแปด","4395":"ปัตตานี","4397":"นาประดู่","4437":"วัดช้างให้","4399":"คลองทราย","4400":"ตาเซะ","4402":"ยะลา","4405":"ไม้แก่น","4408":"รามัน","4409":"บาลอ","4411":"รือเสาะ","4414":"ลาโละ","4416":"มะรือโบ","4419":"ตันหยงมัส","4421":"ป่าไผ่","4423":"เจาะไอร้อง","4424":"บูกิต","4427":"โต๊ะเด็ง","4428":"สุไหงปาดี","4432":"สุไหงโก-ลก","4368":"คลองแงะ","4373":"ปาดังเบซาร์ (ไทย)","4374":"ปาดังเบซาร์","4042":"สุพรรณบุรี","4044":"สระโกสินารายณ์","4045":"ลูกแก","4048":"ท่าเรือน้อย","4051":"ท่าม่วง","4057":"กาญจนบุรี","4063":"วังเย็น","4069":"ท่ากิเลน","4073":"วังโพ","4077":"น้ำตก","4238":"คีรีรัฐนิคม","4272":"ที่วัง","4281":"ห้วยยอด","4289":"ตรัง","4294":"กันตัง","4302":"บ้านทุ่งหล่อ","4303":"โคกคราม","4308":"นครศรีธรรมราช","5001":"วงเวียนใหญ่","5003":"ตลาดพลู","5008":"วัดสิงห์","5012":"รางโพธิ์","5018":"มหาชัย","5019":"บ้านแหลม","5032":"แม่กลอง"};   // station code -> name
+var ROLE_TXT = { staff:'นายสถานี', officer:'เจ้าหน้าที่' };
+var PAGE = 10, LG = [], mode = 'local', F = { role:'all', range:'all', q:'', pg:0 };
+function esc(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){ return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]; }); }
+function norm(s){ return String(s || '').toLowerCase().replace(/[\s\.\-_()·]/g, ''); }
+function stName(c){ var n = STN[c]; return n ? (n.indexOf('สถานี') === 0 ? n : 'สถานี' + n) : ''; }
+function device(ua){
+  ua = String(ua || ''); if(!ua) return '—';
+  var os = /Windows/.test(ua) ? 'Windows' : /Android/.test(ua) ? 'Android' : /iPhone|iPad|iPod/.test(ua) ? 'iOS' : /Mac OS X/.test(ua) ? 'macOS' : /Linux/.test(ua) ? 'Linux' : 'อื่น ๆ';
+  var br = /Edg\//.test(ua) ? 'Edge' : /OPR\//.test(ua) ? 'Opera' : /Chrome\//.test(ua) ? 'Chrome' : /Firefox\//.test(ua) ? 'Firefox' : /Safari\//.test(ua) ? 'Safari' : 'เบราว์เซอร์';
+  return br + ' บน ' + os;
+}
+function tz(d, o){ try{ return d.toLocaleString('th-TH', Object.assign({ timeZone:'Asia/Bangkok' }, o)); }catch(e){ return d.toISOString(); } }
+function dateTxt(d){ return tz(d, { day:'numeric', month:'short', year:'numeric' }); }
+function timeTxt(d){ return tz(d, { hour:'2-digit', minute:'2-digit', second:'2-digit', hour12:false }) + ' น.'; }
+function ago(d){
+  var s = Math.max(0, Math.round((Date.now() - d.getTime()) / 1000));
+  if(s < 60) return 'เมื่อสักครู่'; if(s < 3600) return Math.floor(s / 60) + ' นาทีที่แล้ว';
+  if(s < 86400) return Math.floor(s / 3600) + ' ชั่วโมงที่แล้ว'; return Math.floor(s / 86400) + ' วันที่แล้ว';
+}
+function dayKey(d){ return tz(d, { year:'numeric', month:'2-digit', day:'2-digit' }); }
+function filtered(){
+  var q = norm(F.q), now = Date.now(), todayKey = dayKey(new Date());
+  return LG.filter(function(r){
+    if(F.role !== 'all' && r.role !== F.role) return false;
+    if(F.range === 'today' && dayKey(r.d) !== todayKey) return false;
+    if((F.range === '7' || F.range === '30') && now - r.d.getTime() > parseInt(F.range, 10) * 86400000) return false;
+    return !q || [r.name, r.username, r.station, stName(r.station), ROLE_TXT[r.role]].some(function(k){ return norm(k).indexOf(q) > -1; });
+  });
+}
+function render(){
+  var list = filtered(), pages = Math.max(1, Math.ceil(list.length / PAGE));
+  F.pg = Math.min(Math.max(0, F.pg), pages - 1);
+  var from = F.pg * PAGE, slice = list.slice(from, from + PAGE);
+  var todayKey = dayKey(new Date()), today = LG.filter(function(r){ return dayKey(r.d) === todayKey; });
+  var users = {}; today.forEach(function(r){ users[r.username] = 1; });
+  document.getElementById('lg-k-all').textContent = LG.length;
+  document.getElementById('lg-k-today').textContent = today.length;
+  document.getElementById('lg-k-users').textContent = Object.keys(users).length;
+  document.getElementById('lg-k-last').textContent = LG.length ? LG[0].name + ' · ' + dateTxt(LG[0].d) + ' ' + timeTxt(LG[0].d) : 'ยังไม่มีการล็อกอิน';
+  window.__loginCount = LG.length;
+  var kl = document.getElementById('kpi-login'); if(kl) kl.textContent = LG.length;
+  var kt = document.getElementById('kpi-total'); if(kt && typeof LOGS !== 'undefined') kt.textContent = LOGS.length + LG.length;
+  document.getElementById('lg-chips').innerHTML = [['all', 'ทั้งหมด'], ['staff', 'นายสถานี'], ['officer', 'เจ้าหน้าที่']].map(function(c){
+    return '<button class="lg-chip' + (F.role === c[0] ? ' active' : '') + '" onclick="lg.role(\'' + c[0] + '\')">' + c[1] + '</button>';
+  }).join('');
+  document.getElementById('lg-body').innerHTML = slice.length ? slice.map(function(r){
+    return '<tr><td class="tm"><b>' + dateTxt(r.d) + ' · ' + timeTxt(r.d) + '</b><span>' + ago(r.d) + '</span></td>' +
+      '<td class="who"><b>' + esc(r.name) + '</b><span>' + esc(r.username) + '</span></td>' +
+      '<td><span class="lg-pill ' + esc(r.role) + '">' + (ROLE_TXT[r.role] || esc(r.role)) + '</span></td>' +
+      '<td>' + (r.station ? esc(r.station) + ' · ' + esc(stName(r.station)) : '—') + '</td>' +
+      '<td class="hide-s" style="font-size:12px;color:var(--text-dim)">' + esc(device(r.agent)) + '</td></tr>';
+  }).join('') : '<tr><td colspan="5" style="text-align:center;color:var(--text-faint);padding:24px">' + (LG.length ? 'ไม่พบการล็อกอินที่ตรงกับเงื่อนไข' : 'ยังไม่มีประวัติการล็อกอิน') + '</td></tr>';
+  document.getElementById('lg-count').textContent = list.length ? 'แสดง ' + (from + 1) + '–' + (from + slice.length) + ' จาก ' + list.length + ' ครั้ง' : 'ไม่พบรายการ';
+  document.getElementById('lg-pg').textContent = 'หน้า ' + (F.pg + 1) + ' / ' + pages;
+  document.getElementById('lg-prev').disabled = F.pg <= 0;
+  var nxt = Math.min(PAGE, list.length - (from + PAGE));
+  var nb = document.getElementById('lg-next'); nb.disabled = F.pg >= pages - 1; nb.textContent = nxt > 0 ? 'ถัดไป ' + nxt + ' ›' : 'ถัดไป ›';
+  document.getElementById('lg-sub').textContent = mode === 'db'
+    ? 'ข้อมูลจากฐานข้อมูลกลาง — บันทึกทุกครั้งที่นายสถานีหรือเจ้าหน้าที่ล็อกอิน พร้อมวันและเวลา (รีเฟรชอัตโนมัติ)'
+    : 'ข้อมูลจากเบราว์เซอร์เครื่องนี้ — ยังไม่ได้เชื่อมฐานข้อมูลกลาง จึงเห็นเฉพาะการล็อกอินที่เกิดบนเครื่องนี้';
+}
+async function load(){
+  var err = document.getElementById('lg-err');
+  if(!err || !document.getElementById('lg-body')) return;   // page replaced by the access-denied view (station users)
+  try{
+    var rows = [];
+    if(window.GeccDB && window.GeccDB.enabled){
+      await window.GeccDB.ready; mode = 'db';
+      rows = (await window.GeccDB.loadLogins()).map(function(r){ return { username:r.username || '', name:r.display_name || r.username || '', role:r.role, station:r.station_code || '', at:r.logged_in_at, agent:r.user_agent || '' }; });
+    }else{
+      mode = 'local';
+      try{ rows = JSON.parse(localStorage.getItem('gecc-login-history') || '[]'); }catch(e){ rows = []; }
+    }
+    LG = rows.map(function(r){ r.d = new Date(r.at); return r; }).filter(function(r){ return !isNaN(r.d.getTime()); }).sort(function(a, b){ return b.d - a.d; });
+    err.innerHTML = ''; render();
+  }catch(e){
+    err.innerHTML = '<div class="lg-err">โหลดประวัติการล็อกอินไม่สำเร็จ: ' + esc(e && e.message || e) + ' · ถ้าเพิ่งอัปเดตระบบ ให้รันไฟล์ supabase-setup.sql ซ้ำ แล้ว<a href="gecc-check.html">ตรวจสอบการเชื่อมต่อ</a></div>';
+    if(!LG.length) render();
+  }
+}
+window.lg = {
+  search: function(v){ F.q = v; F.pg = 0; render(); },
+  role: function(v){ F.role = v; F.pg = 0; render(); },
+  range: function(v){ F.range = v; F.pg = 0; render(); },
+  page: function(d){ F.pg += d; render(); },
+  csv: function(){
+    var head = ['วันที่', 'เวลา', 'ชื่อผู้ล็อกอิน', 'รหัสผู้ใช้', 'บทบาท', 'รหัสสถานี', 'ชื่อสถานี', 'อุปกรณ์'];
+    var lines = [head].concat(filtered().map(function(r){ return [dateTxt(r.d), timeTxt(r.d), r.name, r.username, ROLE_TXT[r.role] || r.role, r.station, stName(r.station), device(r.agent)]; }));
+    var txt = '\ufeff' + lines.map(function(l){ return l.map(function(v){ return '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"'; }).join(','); }).join('\r\n');
+    var a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([txt], { type:'text/csv;charset=utf-8' })); a.download = 'gecc-login-history.csv';
+    document.body.appendChild(a); a.click(); document.body.removeChild(a); setTimeout(function(){ URL.revokeObjectURL(a.href); }, 2000);
+  }
+};
+load();
+setInterval(function(){ if(!document.hidden) load(); }, 30000);
+window.addEventListener('focus', load);
+})();
 </script>
 <!--GECC_CHAT_START-->
 <script>
