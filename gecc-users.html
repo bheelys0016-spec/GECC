@@ -318,6 +318,7 @@ GeccDB.signIn = async function(username, password, expectRole){
   if(!m || m.noProfile){ await sb.auth.signOut(); GeccDB.me = null; return { ok:false, error:'noprofile' }; }
   if(expectRole && m.role !== expectRole){ await sb.auth.signOut(); GeccDB.me = null; return { ok:false, error:'role' }; }
   GeccDB.syncLocal(m);
+  try{ await sb.rpc('log_login', { p_agent:String(navigator.userAgent || '').slice(0, 300) }); }catch(e){}
   return { ok:true, me:m };
 };
 
@@ -495,6 +496,69 @@ GeccDB.clearPasswords = async function(){
   var r = await sb.rpc('admin_clear_passwords');
   if(r.error) throw r.error;
 };
+/* all audit items of all stations (officers only) — pages through the 1000-row limit of the API */
+/* number of evidence photos per station (officers only) */
+GeccDB.loadAuditImageCounts = async function(){
+  var counts = {}, from = 0, size = 1000;
+  for(;;){
+    var r = await sb.from('audit_images').select('station_code')
+      .order('station_code', { ascending:true }).order('created_at', { ascending:true }).order('id', { ascending:true }).range(from, from + size - 1);
+    if(r.error) throw r.error;
+    var d = r.data || [];
+    d.forEach(function(x){ counts[x.station_code] = (counts[x.station_code] || 0) + 1; });
+    if(d.length < size || from > 200000) break;
+    from += size;
+  }
+  return counts;
+};
+/* login history, newest first (officers see everyone, a station user only sees their own) */
+GeccDB.loadLogins = async function(){
+  var out = [], from = 0, size = 1000;
+  for(;;){
+    var r = await sb.from('login_events').select('*').order('logged_in_at', { ascending:false }).order('id', { ascending:false }).range(from, from + size - 1);
+    if(r.error) throw r.error;
+    var d = r.data || [];
+    out = out.concat(d);
+    if(d.length < size || out.length >= 5000) break;
+    from += size;
+  }
+  return out;
+};
+/* stations with no criteria update for N days (officers: all stations, station users: their own) */
+GeccDB.staleStations = async function(days){
+  var r = await sb.rpc('stale_stations', { p_days:days || 30 });
+  if(r.error) throw r.error;
+  return r.data || [];
+};
+GeccDB.loadAllAudit = async function(){
+  var out = [], from = 0, size = 1000;
+  for(;;){
+    var r = await sb.from('audit_items').select('station_code,crit,item_no,checked,note,drive_link,updated_at')
+      .order('station_code', { ascending:true }).order('crit', { ascending:true }).order('item_no', { ascending:true }).range(from, from + size - 1);
+    if(r.error) throw r.error;
+    var d = r.data || [];
+    out = out.concat(d);
+    if(d.length < size || from > 200000) break;
+    from += size;
+  }
+  return out;
+};
+
+/* ---------- bell badge on every page: +1 while a "no update for 1 month" alert is unread ---------- */
+if(enabled){
+  GeccDB.ready.then(async function(m){
+    if(!m || m.noProfile || window.__geccOwnsBadge) return;
+    try{
+      var rows = await GeccDB.staleStations(30);
+      GeccDB.stale = rows;
+      if(!rows.length) return;
+      var id = m.role === 'officer' ? 'stale-sum:' + rows.length : 'stale:' + rows[0].station_code + ':' + (rows[0].last_update || rows[0].baseline);
+      var read = []; try{ read = JSON.parse(localStorage.getItem('gecc-notif-read') || '[]'); }catch(e){}
+      if(read.indexOf(id) > -1) return;
+      document.querySelectorAll('.notif-badge').forEach(function(b){ var n = parseInt(b.textContent, 10) || 0; b.textContent = n + 1; b.style.display = 'inline-flex'; });
+    }catch(e){}
+  });
+}
 
 /* ---------- connection chip (bottom-left) + account popover ---------- */
 function mountChip(){

@@ -190,6 +190,20 @@
     box-shadow: 0 14px 30px -10px rgba(17,19,39,0.6);
   }
 
+
+  .notif-sample{ font-size:10px; font-weight:600; padding:1px 8px; border-radius:20px; background:var(--divider); color:var(--text-faint); margin-left:8px; vertical-align:middle; }
+  .st-panel{ background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:18px 20px; margin-top:22px; }
+  .st-head h2{ font-size:15px; margin:0 0 3px; } .st-head p{ font-size:12.5px; color:var(--text-dim); margin:0 0 12px; max-width:760px; }
+  .st-in{ font-family:var(--font-th); font-size:13px; padding:8px 12px; border:1px solid var(--input-border); border-radius:10px; background:var(--surface-alt); color:var(--text-strong); width:100%; max-width:320px; margin-bottom:10px; }
+  .st-table{ width:100%; border-collapse:collapse; font-size:13px; }
+  .st-table th{ text-align:left; font-size:11.5px; color:var(--text-dim); padding:8px 10px; border-bottom:1px solid var(--border); }
+  .st-table td{ padding:10px; border-bottom:1px solid var(--divider); vertical-align:middle; }
+  .st-table .nm b{ display:block; } .st-table .nm span{ font-size:11px; color:var(--text-faint); font-family:var(--font-mono); }
+  .st-days{ font-weight:700; color:var(--signal); font-family:var(--font-mono); }
+  .st-table a{ font-size:12px; font-weight:600; color:var(--amber-dim); text-decoration:none; }
+  .st-pager{ display:flex; justify-content:space-between; align-items:center; margin-top:12px; font-size:12px; color:var(--text-dim); gap:10px; }
+  .st-pager button{ font-family:var(--font-th); font-size:12.5px; font-weight:600; padding:6px 14px; border-radius:20px; border:1px solid var(--input-border); background:var(--surface); color:var(--text-strong); cursor:pointer; } .st-pager button:disabled{ opacity:.4; cursor:default; }
+  .st-note{ margin-top:16px; font-size:12px; color:var(--text-dim); padding:10px 14px; border:1px dashed var(--input-border); border-radius:12px; background:var(--surface-alt); }
 </style>
 <!--GECC_BACKEND_START-->
 <script>document.write('<script src="gecc-config.js?t=' + Date.now() + '"><\/script>')</script>
@@ -267,6 +281,7 @@ GeccDB.signIn = async function(username, password, expectRole){
   if(!m || m.noProfile){ await sb.auth.signOut(); GeccDB.me = null; return { ok:false, error:'noprofile' }; }
   if(expectRole && m.role !== expectRole){ await sb.auth.signOut(); GeccDB.me = null; return { ok:false, error:'role' }; }
   GeccDB.syncLocal(m);
+  try{ await sb.rpc('log_login', { p_agent:String(navigator.userAgent || '').slice(0, 300) }); }catch(e){}
   return { ok:true, me:m };
 };
 
@@ -444,6 +459,69 @@ GeccDB.clearPasswords = async function(){
   var r = await sb.rpc('admin_clear_passwords');
   if(r.error) throw r.error;
 };
+/* all audit items of all stations (officers only) — pages through the 1000-row limit of the API */
+/* number of evidence photos per station (officers only) */
+GeccDB.loadAuditImageCounts = async function(){
+  var counts = {}, from = 0, size = 1000;
+  for(;;){
+    var r = await sb.from('audit_images').select('station_code')
+      .order('station_code', { ascending:true }).order('created_at', { ascending:true }).order('id', { ascending:true }).range(from, from + size - 1);
+    if(r.error) throw r.error;
+    var d = r.data || [];
+    d.forEach(function(x){ counts[x.station_code] = (counts[x.station_code] || 0) + 1; });
+    if(d.length < size || from > 200000) break;
+    from += size;
+  }
+  return counts;
+};
+/* login history, newest first (officers see everyone, a station user only sees their own) */
+GeccDB.loadLogins = async function(){
+  var out = [], from = 0, size = 1000;
+  for(;;){
+    var r = await sb.from('login_events').select('*').order('logged_in_at', { ascending:false }).order('id', { ascending:false }).range(from, from + size - 1);
+    if(r.error) throw r.error;
+    var d = r.data || [];
+    out = out.concat(d);
+    if(d.length < size || out.length >= 5000) break;
+    from += size;
+  }
+  return out;
+};
+/* stations with no criteria update for N days (officers: all stations, station users: their own) */
+GeccDB.staleStations = async function(days){
+  var r = await sb.rpc('stale_stations', { p_days:days || 30 });
+  if(r.error) throw r.error;
+  return r.data || [];
+};
+GeccDB.loadAllAudit = async function(){
+  var out = [], from = 0, size = 1000;
+  for(;;){
+    var r = await sb.from('audit_items').select('station_code,crit,item_no,checked,note,drive_link,updated_at')
+      .order('station_code', { ascending:true }).order('crit', { ascending:true }).order('item_no', { ascending:true }).range(from, from + size - 1);
+    if(r.error) throw r.error;
+    var d = r.data || [];
+    out = out.concat(d);
+    if(d.length < size || from > 200000) break;
+    from += size;
+  }
+  return out;
+};
+
+/* ---------- bell badge on every page: +1 while a "no update for 1 month" alert is unread ---------- */
+if(enabled){
+  GeccDB.ready.then(async function(m){
+    if(!m || m.noProfile || window.__geccOwnsBadge) return;
+    try{
+      var rows = await GeccDB.staleStations(30);
+      GeccDB.stale = rows;
+      if(!rows.length) return;
+      var id = m.role === 'officer' ? 'stale-sum:' + rows.length : 'stale:' + rows[0].station_code + ':' + (rows[0].last_update || rows[0].baseline);
+      var read = []; try{ read = JSON.parse(localStorage.getItem('gecc-notif-read') || '[]'); }catch(e){}
+      if(read.indexOf(id) > -1) return;
+      document.querySelectorAll('.notif-badge').forEach(function(b){ var n = parseInt(b.textContent, 10) || 0; b.textContent = n + 1; b.style.display = 'inline-flex'; });
+    }catch(e){}
+  });
+}
 
 /* ---------- connection chip (bottom-left) + account popover ---------- */
 function mountChip(){
@@ -545,9 +623,18 @@ if(document.body) mountChip(); else document.addEventListener('DOMContentLoaded'
     <button class="filter-btn" data-f="audit" onclick="setFilter('audit',this)">ตรวจประเมิน</button>
     <button class="filter-btn" data-f="feedback" onclick="setFilter('feedback',this)">ข้อร้องเรียน</button>
     <button class="filter-btn" data-f="system" onclick="setFilter('system',this)">ระบบ</button>
+    <button class="filter-btn" data-f="stale" onclick="setFilter('stale',this)">ไม่อัปเดต 1 เดือน</button>
   </div>
 
   <div class="notif-list" id="notif-list"></div>
+
+  <div class="st-panel" id="stale-panel" style="display:none">
+    <div class="st-head"><div><h2 id="st-title">สถานีที่ไม่มีการอัปเดตเกณฑ์เกิน 1 เดือน</h2><p>นับจากวันที่ล่าสุดที่สถานีติ๊กเกณฑ์ แก้ไขข้อมูล หรือแนบรูปหลักฐาน (สถานีที่ยังไม่เคยอัปเดตเลย นับจากวันที่เปิดบัญชี) · ระบบแจ้งเตือนไปยังสถานีนั้นและเจ้าหน้าที่ทุกคน</p></div></div>
+    <input class="st-in" id="st-q" placeholder="ค้นหาสถานี / รหัส" oninput="stalePanel.search(this.value)">
+    <table class="st-table"><thead><tr><th>สถานี</th><th>อัปเดตล่าสุด</th><th>ไม่มีการอัปเดตมา</th><th></th></tr></thead><tbody id="st-body"></tbody></table>
+    <div class="st-pager"><span id="st-count"></span><span><button id="st-prev" onclick="stalePanel.page(-1)">‹ ก่อนหน้า</button> <span id="st-pg"></span> <button id="st-next" onclick="stalePanel.page(1)">ถัดไป 10 ›</button></span></div>
+  </div>
+  <div class="st-note" id="st-note" style="display:none"></div>
 </div>
 
 <div class="search-overlay" id="search-overlay" onclick="if(event.target===this) closeSearch()">
@@ -608,15 +695,18 @@ document.addEventListener('click', function(e){
 </script>
 
 <script>
+window.__geccOwnsBadge = true;
 const NOTIFICATIONS = [
-  { id:'n1', type:'urgent',  icon:'⚠️', title:'สถานีนครราชสีมาคะแนนต่ำกว่าเกณฑ์ต่อเนื่อง', desc:'คะแนน CSAT อยู่ที่ 3.1 ต่อเนื่องเป็นสัปดาห์ที่ 2 ต่ำกว่าเกณฑ์ขั้นต่ำที่ตั้งไว้ 3.5', time:'วันนี้ · 09:12', link:'gecc-station.html', linkLabel:'ดูโปรไฟล์สถานี →' },
-  { id:'n2', type:'audit',   icon:'📋', title:'ใกล้ครบกำหนดส่งหลักฐานตรวจประเมินรอบ 2', desc:'เหลือเวลาอีก 5 วัน สำหรับสถานีที่ยังอยู่ในสถานะรอตรวจอีก 41 แห่งทั่วประเทศ', time:'วันนี้ · 08:00', link:'gecc-audit.html', linkLabel:'ไปหน้าตรวจประเมิน →' },
-  { id:'n3', type:'feedback',icon:'💬', title:'มีเรื่องร้องเรียนใหม่ 3 รายการ', desc:'ส่งเข้ามาจากหน้าจอกิออสก์ประจำสถานี รอเจ้าหน้าที่รับเรื่องและอัปเดตสถานะ', time:'เมื่อวาน · 16:40', link:'gecc-feedback.html', linkLabel:'ดูรายการร้องเรียน →' },
-  { id:'n4', type:'audit',   icon:'✅', title:'สถานีอยุธยาอัปโหลดหลักฐานครบแล้ว', desc:'ความคืบหน้าการเก็บหลักฐานอยู่ที่ 100% พร้อมส่งให้คณะกรรมการตรวจจริง', time:'เมื่อวาน · 14:05', link:'gecc-audit.html', linkLabel:'ตรวจสอบหลักฐาน →' },
-  { id:'n5', type:'system',  icon:'🧾', title:'รายงานประจำเดือนพร้อมดาวน์โหลดแล้ว', desc:'สรุปผลการประเมินมาตรฐาน GECC ของทุกสถานีประจำเดือนนี้จัดทำเสร็จเรียบร้อย', time:'2 วันที่แล้ว', link:'gecc-report.html', linkLabel:'ไปหน้ารายงาน →' },
-  { id:'n6', type:'system',  icon:'✨', title:'ตู้แปลภาษาอัตโนมัติมียอดใช้งานเพิ่มขึ้น', desc:'ยอดใช้งานเพิ่มขึ้น 18% เทียบกับเดือนก่อน ที่สถานีกรุงเทพ (หัวลำโพง)', time:'3 วันที่แล้ว', link:'gecc-innovation.html', linkLabel:'ดูสถิติการใช้งาน →' },
+  { id:'n1', sample:true, type:'urgent',  icon:'⚠️', title:'สถานีนครราชสีมาคะแนนต่ำกว่าเกณฑ์ต่อเนื่อง', desc:'คะแนน CSAT อยู่ที่ 3.1 ต่อเนื่องเป็นสัปดาห์ที่ 2 ต่ำกว่าเกณฑ์ขั้นต่ำที่ตั้งไว้ 3.5', time:'วันนี้ · 09:12', link:'gecc-station.html', linkLabel:'ดูโปรไฟล์สถานี →' },
+  { id:'n2', sample:true, type:'audit',   icon:'📋', title:'ใกล้ครบกำหนดส่งหลักฐานตรวจประเมินรอบ 2', desc:'เหลือเวลาอีก 5 วัน สำหรับสถานีที่ยังอยู่ในสถานะรอตรวจอีก 41 แห่งทั่วประเทศ', time:'วันนี้ · 08:00', link:'gecc-audit.html', linkLabel:'ไปหน้าตรวจประเมิน →' },
+  { id:'n3', sample:true, type:'feedback',icon:'💬', title:'มีเรื่องร้องเรียนใหม่ 3 รายการ', desc:'ส่งเข้ามาจากหน้าจอกิออสก์ประจำสถานี รอเจ้าหน้าที่รับเรื่องและอัปเดตสถานะ', time:'เมื่อวาน · 16:40', link:'gecc-feedback.html', linkLabel:'ดูรายการร้องเรียน →' },
+  { id:'n4', sample:true, type:'audit',   icon:'✅', title:'สถานีอยุธยาอัปโหลดหลักฐานครบแล้ว', desc:'ความคืบหน้าการเก็บหลักฐานอยู่ที่ 100% พร้อมส่งให้คณะกรรมการตรวจจริง', time:'เมื่อวาน · 14:05', link:'gecc-audit.html', linkLabel:'ตรวจสอบหลักฐาน →' },
+  { id:'n5', sample:true, type:'system',  icon:'🧾', title:'รายงานประจำเดือนพร้อมดาวน์โหลดแล้ว', desc:'สรุปผลการประเมินมาตรฐาน GECC ของทุกสถานีประจำเดือนนี้จัดทำเสร็จเรียบร้อย', time:'2 วันที่แล้ว', link:'gecc-report.html', linkLabel:'ไปหน้ารายงาน →' },
+  { id:'n6', sample:true, type:'system',  icon:'✨', title:'ตู้แปลภาษาอัตโนมัติมียอดใช้งานเพิ่มขึ้น', desc:'ยอดใช้งานเพิ่มขึ้น 18% เทียบกับเดือนก่อน ที่สถานีกรุงเทพ (หัวลำโพง)', time:'3 วันที่แล้ว', link:'gecc-innovation.html', linkLabel:'ดูสถิติการใช้งาน →' },
 ];
 
+let REAL = [];
+function allNotifs(){ return REAL.concat(NOTIFICATIONS); }
 let currentFilter = 'all';
 
 function getReadIds(){
@@ -630,14 +720,14 @@ function markRead(id){
   if(ids.indexOf(id) === -1){ ids.push(id); setReadIds(ids); }
 }
 function markAllRead(){
-  setReadIds(NOTIFICATIONS.map(n => n.id));
+  setReadIds(allNotifs().map(n => n.id));
   render();
   updateBadges();
 }
 
 function updateBadges(){
   const read = getReadIds();
-  const unread = NOTIFICATIONS.filter(n => read.indexOf(n.id) === -1).length;
+  const unread = allNotifs().filter(n => read.indexOf(n.id) === -1).length;
   document.querySelectorAll('.notif-badge').forEach(b => {
     if(unread > 0){ b.textContent = unread; b.style.display = 'inline-flex'; }
     else{ b.style.display = 'none'; }
@@ -654,7 +744,7 @@ function setFilter(f, btn){
 function render(){
   const read = getReadIds();
   const list = document.getElementById('notif-list');
-  const items = NOTIFICATIONS.filter(n => currentFilter === 'all' || n.type === currentFilter);
+  const items = allNotifs().filter(n => currentFilter === 'all' || n.type === currentFilter || n.cat === currentFilter);
 
   if(items.length === 0){
     list.innerHTML = '<div class="empty-state">ไม่มีการแจ้งเตือนในหมวดนี้</div>';
@@ -669,7 +759,7 @@ function render(){
         <div class="notif-body">
           <div class="notif-top">
             <span class="unread-dot"></span>
-            <span class="notif-title">${n.title}</span>
+            <span class="notif-title">${n.title}</span>${n.sample ? '<span class="notif-sample">ตัวอย่าง</span>' : ''}
           </div>
           <p class="notif-desc">${n.desc}</p>
           <div class="notif-meta">
@@ -793,6 +883,95 @@ document.addEventListener('keydown', function(e){
     closeSearch();
   }
 });
+</script>
+<script>
+// ===================== real alerts: stations with no criteria update for 30 days =====================
+(function(){
+var STALE_DAYS = 30, PAGE = 10, STN = {"1001":"กรุงเทพ","1004":"สามเสน","1007":"ชุมทางบางซื่อ","1000":"สถานีกลางกรุงเทพอภิวัฒน์","1011":"บางเขน","1015":"หลักสี่","1017":"ดอนเมือง","1021":"รังสิต","1022":"เชียงราก","1024":"เชียงรากน้อย","1026":"คลองพุทรา","1028":"บางปะอิน","1029":"บ้านโพ","1031":"อยุธยา","1032":"บ้านม้า","1033":"มาบพระจันทร์","1035":"พระแก้ว","1036":"ชุมทางบ้านภาชี","1037":"หนองวิวัฒน์","1039":"ท่าเรือ","1041":"บ้านหมอ","1045":"หนองโดน","1047":"บ้านกลับ","1048":"บ้านป่าหวาย","1050":"ลพบุรี","1051":"ท่าแค","1053":"โคกกะเทียม","1055":"หนองเต่า","1056":"หนองทรายขาว","1058":"บ้านหมี่","1061":"จันเสน","1063":"ช่องแค","1066":"โพนทอง","1067":"บ้านตาคลี","1069":"ดงมะกุ","1070":"หัวหวาย","1072":"หนองโพ","1074":"หัวงิ้ว","1076":"เนินมะกอก","1079":"เขาทอง","1082":"นครสวรรค์","1083":"ปากน้ำโพ","1226":"บึงบอระเพ็ด","1084":"ทับกฤช","1086":"คลองปลากด","1088":"ชุมแสง","1091":"วังกร่าง","1093":"บางมูลนาก","1095":"หอไกร","1097":"ดงตะขบ","1099":"ตะพานหิน","1101":"ห้วยเกตุ","1103":"หัวดง","1105":"วังกรด","1107":"พิจิตร","1109":"ท่าฬ่อ","1111":"บางกระทุ่ม","1112":"แม่เทียบ","1114":"บ้านใหม่","1116":"บึงพระ","1118":"พิษณุโลก","1119":"บ้านเต็งหนาม","1121":"บ้านตูม","1122":"แควน้อย","1125":"พรหมพิราม","1127":"หนองตม","1130":"บ้านบุ่ง","1131":"บ้านโคน","1134":"พิชัย","1136":"ไร่อ้อย","1137":"ชุมทางบ้านดารา","1144":"ท่าสัก","1146":"ตรอน","1148":"วังกะพี้","1150":"อุตรดิตถ์","1151":"ศิลาอาสน์","1154":"บ้านด่าน","1157":"ปางต้นผึ้ง","1160":"ห้วยไร่","1164":"เด่นชัย","1165":"ปากปาน","1167":"แก่งหลวง","1172":"บ้านปิน","1176":"ผาคัน","1180":"ปางป๋วย","1182":"แม่จาง","1184":"แม่เมาะ","1187":"ศาลาผาลาด","1189":"แม่ทะ","1192":"หนองวัวเฒ่า","1193":"นครลำปาง","1196":"ห้างฉัตร","1198":"ปางม่วง","1201":"แม่ตานน้อย","1204":"ขุนตาน","1206":"ทาชมภู","1208":"ศาลาแม่ทา","1212":"หนองหล่ม","1216":"ลำพูน","1218":"ป่าเส้า","1220":"สารภี","1222":"เชียงใหม่","1139":"คลองมะพลับ","1143":"สวรรคโลก","2001":"หนองกวย","2002":"หนองแซง","2004":"หนองสีดา","2005":"บ้านป๊อกแป๊ก","2007":"สระบุรี","2009":"ชุมทางหนองบัว","2011":"ชุมทางแก่งคอย","2082":"มาบกะเบา","2083":"ผาเสด็จ","2084":"หินลับ","2086":"มวกเหล็ก","2088":"กลางดง","2089":"ปางอโศก","2091":"บันไดม้า","2093":"ปากช่อง","2095":"ซับม่วง","2096":"จันทึก","2097":"คลองขนานจิตร","2100":"คลองไผ่","2101":"ลาดบัวขาว","2102":"บ้านใหม่สำโรง","2103":"หนองน้ำขุ่น","2105":"สีคิ้ว","2107":"สูงเนิน","2109":"กุดจิก","2111":"โคกกรวด","2113":"ภูเขาลาด","2114":"นครราชสีมา","2115":"ชุมทางถนนจิระ","2211":"บ้านพะเนา","2213":"ท่าช้าง","2215":"หนองมโนรมย์","2217":"จักราช","2220":"บ้านหินโคน","2222":"หินดาษ","2224":"ห้วยแถลง","2227":"หนองกระทิง","2229":"ลำปลายมาศ","2231":"ทะเมนชัย","2233":"บ้านแสลงพัน","2234":"บ้านหนองตาด","2236":"บุรีรัมย์","2239":"ห้วยราช","2243":"กระสัง","2244":"หนองเต็ง","2246":"ลำชี","2248":"สุรินทร์","2250":"บุฤาษี","2252":"เมืองที","2254":"กะโดนค้อ","2256":"ศีขรภูมิ","2258":"บ้านกะลัน","2261":"สำโรงทาบ","2264":"ห้วยทับทัน","2267":"อุทุมพรพิสัย","2270":"บ้านเนียม","2273":"ศรีสะเกษ","2277":"หนองแวง","2279":"บ้านคล้อ","2281":"กันทรารมย์","2285":"ห้วยขยุง","2288":"บุ่งหวาย","2290":"อุบลราชธานี","2117":"บ้านเกาะ","2120":"บ้านกระโดน","2121":"หนองแมว","2122":"โนนสูง","2124":"บ้านดงพลอง","2126":"บ้านมะค่า","2128":"พลสงคราม","2129":"บ้านดอนใหญ่","2131":"เมืองคง","2133":"โนนทองหลาง","2136":"ชุมทางบัวใหญ่","2139":"หนองบัวลาย","2142":"หนองมะเขือ","2144":"เมืองพล","2149":"บ้านหัน","2152":"บ้านไผ่","2156":"บ้านแฮด","2160":"ท่าพระ","2163":"ขอนแก่น","2166":"สำราญ","2170":"โนนพะยอม","2172":"น้ำพอง","2174":"ห้วยเสียว","2177":"เขาสวนกวาง","2181":"โนนสะอาด","2183":"ห้วยเกิ้ง","2186":"กุมภวาปี","2188":"ห้วยสามพาด","2190":"หนองตะไก้","2194":"หนองขอนกว้าง","2195":"อุดรธานี","2201":"นาพู่","2207":"นาทา","2209":"หนองคาย","2012":"บ้านช่องใต้","2017":"หินซ้อน","2020":"แก่งเสือเต้น","2024":"โคกสลุง","2026":"สุรนารายณ์","2033":"ลำนารายณ์","2038":"แผ่นดินทอง","2042":"โคกคลี","2045":"ช่องสำราญ","2049":"บ้านวะตะแบก (เทพสถิต)","2052":"ห้วยยายจิ๋ว","2057":"บำเหน็จณรงค์","2062":"จัตุรัส","2066":"หนองฉิม","2072":"บ้านเหลื่อม","2076":"หนองพลวง","3001":"มักกะสัน","3009":"คลองตัน","3010":"หัวหมาก","3012":"บ้านทับช้าง","3014":"ลาดกระบัง","3015":"หัวตะเข้","3017":"คลองหลวงแพ่ง","3019":"คลองเปรง","3021":"คลองบางพระ","3023":"ชุมทางฉะเชิงเทรา","3055":"บางน้ำเปรี้ยว","3057":"ชุมทางคลองสิบเก้า","3059":"โยทะกา","3061":"บ้านสร้าง","3064":"บ้านปากพลี","3066":"ปราจีนบุรี","3068":"โคกมะกอก","3070":"ประจันตคาม","3072":"บ้านดงบัง","3075":"กบินทร์บุรี","3078":"หนองสัง","3083":"บ้านแก้ง","3087":"สระแก้ว","3094":"วัฒนานคร","3100":"อรัญประเทศ","3130":"ด่านพรมแดนบ้านคลองลึก","3118":"องครักษ์","3120":"วิหารแดง","3121":"บุใหญ่","3122":"ชุมทางบ้านไผ่นาบุญ","3026":"ดอนสีนนท์","3029":"พานทอง","3032":"ชลบุรี","3034":"บางพระ","3036":"ชุมทางศรีราชา","3039":"บางละมุง","3041":"พัทยา","3043":"บ้านห้วยขวาง","3045":"ชุมทางเขาชีจรรย์","3047":"บ้านพลูตาหลวง","3048":"อู่ตะเภา","3049":"จุกเสม็ด","3110":"บ้านฉาง","3115":"มาบตาพุด","3002":"แม่น้ำ","4005":"บางบำหรุ","4004":"ชุมทางตลิ่งชัน","4002":"ธนบุรี","4008":"ศาลาธรรมสพน์","4009":"ศาลายา","4010":"วัดสุวรรณ","4012":"วัดงิ้วราย","4013":"นครชัยศรี","4014":"ท่าแฉลบ","4015":"ต้นสำโรง","4016":"นครปฐม","4018":"โพรงมะเดื่อ","4019":"คลองบางตาล","4020":"ชุมทางหนองปลาดุก","4079":"บ้านโป่ง","4081":"นครชุมน์","4082":"คลองตาคด","4083":"โพธาราม","4085":"เจ็ดเสมียน","4087":"บ้านกล้วย","4089":"ราชบุรี","4090":"บ้านคูบัว","4091":"บ่อตะคร้อ","4093":"ปากท่อ","4095":"บางเค็ม","4097":"เขาย้อย","4098":"หนองปลาไหล","4099":"บางจาก","4101":"เพชรบุรี","4104":"เขาทโมน","4105":"หนองไม้เหลือง","4107":"หนองจอก","4108":"หนองศาลา","4111":"ชะอำ","4114":"ห้วยทรายเหนือ","4115":"ห้วยทรายใต้","4118":"หัวหิน","4119":"หนองแก","4120":"สวนสนประดิพัทธ์","4121":"เขาเต่า","4123":"วังก์พง","4124":"ปราณบุรี","4126":"หนองคาง","4128":"สามร้อยยอด","4130":"สามกระทาย","4133":"กุยบุรี","4135":"บ่อนอก","4138":"ทุ่งมะเม่า","4140":"คั่นกระได","4142":"ประจวบคีรีขันธ์","4146":"วังด้วน","4149":"ห้วยยาง","4153":"ทับสะแก","4158":"บ้านกรูด","4161":"นาผักขวง","4163":"บางสะพานใหญ่","4165":"ชะม่วง","4167":"บางสะพานน้อย","4169":"ห้วยสัก","4172":"เขาไชยราช","4175":"มาบอำมฤต","4178":"คลองวังช้าง","4179":"ปะทิว","4181":"บ้านคอกม้า","4182":"สะพลี","4184":"นาชะอัง","4186":"ชุมพร","4187":"แสงแดด","4189":"ทุ่งคา","4191":"วิสัย","4194":"สวี","4196":"เขาสวนทุเรียน","4199":"ปากตะโก","4201":"ควนหินมุ้ย","4203":"หลังสวน","4205":"คลองขนาน","4208":"ละแม","4210":"บ้านดวด","4212":"คันธุลี","4213":"ดอนธูป","4215":"ท่าชนะ","4218":"เขาพนมแบก","4221":"ไชยา","4224":"ท่าฉาง","4226":"คลองไทร","4227":"มะลวน","4229":"ชุมทางบ้านทุ่งโพธิ์","4239":"สุราษฎร์ธานี","4241":"เขาหัวควาย","4245":"เขาพลู","4247":"บ้านนา","4249":"ห้วยมุด","4250":"นาสาร","4253":"พรุพี","4255":"บ้านส้อง","4257":"บ้านพรุกระแชง","4258":"ห้วยปริก","4259":"กระเบียด","4261":"ทานพอ","4262":"ฉวาง","4264":"คลองจันดี","4266":"หลักช้าง","4268":"นาบอน","4269":"คลองจัง","4270":"ชุมทางทุ่งสง","4295":"ใสใหญ่","4297":"ช่องเขา","4299":"ร่อนพิบูลย์","4300":"ชุมทางเขาชุมทอง","4310":"ควนหนองคว้า","4312":"บ้านตูล","4315":"ชะอวด","4317":"บ้านนางหลง","4318":"บ้านขอนหาด","4319":"แหลมโตนด","4321":"ปากคลอง","4325":"พัทลุง","4328":"บ้านต้นโดน","4330":"เขาชัยสน","4331":"บางแก้ว","4334":"ควนเคี่ยม","4336":"หารเทา","4338":"โคกทราย","4340":"ควนเนียง","4342":"บ้านเกาะใหญ่","4344":"บางกล่ำ","4345":"บ้านดินลาน","4347":"ชุมทางหาดใหญ่","4377":"นาม่วง","4381":"วัดควนมีด","4384":"จะนะ","4386":"ท่าแมงลัก","4388":"เกาะสะบ้า","4391":"เทพา","4393":"ตาแปด","4395":"ปัตตานี","4397":"นาประดู่","4437":"วัดช้างให้","4399":"คลองทราย","4400":"ตาเซะ","4402":"ยะลา","4405":"ไม้แก่น","4408":"รามัน","4409":"บาลอ","4411":"รือเสาะ","4414":"ลาโละ","4416":"มะรือโบ","4419":"ตันหยงมัส","4421":"ป่าไผ่","4423":"เจาะไอร้อง","4424":"บูกิต","4427":"โต๊ะเด็ง","4428":"สุไหงปาดี","4432":"สุไหงโก-ลก","4368":"คลองแงะ","4373":"ปาดังเบซาร์ (ไทย)","4374":"ปาดังเบซาร์","4042":"สุพรรณบุรี","4044":"สระโกสินารายณ์","4045":"ลูกแก","4048":"ท่าเรือน้อย","4051":"ท่าม่วง","4057":"กาญจนบุรี","4063":"วังเย็น","4069":"ท่ากิเลน","4073":"วังโพ","4077":"น้ำตก","4238":"คีรีรัฐนิคม","4272":"ที่วัง","4281":"ห้วยยอด","4289":"ตรัง","4294":"กันตัง","4302":"บ้านทุ่งหล่อ","4303":"โคกคราม","4308":"นครศรีธรรมราช","5001":"วงเวียนใหญ่","5003":"ตลาดพลู","5008":"วัดสิงห์","5012":"รางโพธิ์","5018":"มหาชัย","5019":"บ้านแหลม","5032":"แม่กลอง"};
+var ROWS = [], Q = '', PG = 0, MODE = 'local';
+function esc(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){ return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]; }); }
+function norm(s){ return String(s || '').toLowerCase().replace(/[\s\.\-_()·]/g, ''); }
+function stName(c){ var n = STN[c]; return n ? (n.indexOf('สถานี') === 0 ? n : 'สถานี' + n) : (c || ''); }
+function thDate(d){ try{ return d.toLocaleString('th-TH', { timeZone:'Asia/Bangkok', day:'numeric', month:'short', year:'numeric' }); }catch(e){ return d.toISOString().slice(0, 10); } }
+function thTime(d){ try{ return d.toLocaleString('th-TH', { timeZone:'Asia/Bangkok', hour:'2-digit', minute:'2-digit', hour12:false }) + ' น.'; }catch(e){ return ''; } }
+function isStaff(){ try{ return localStorage.getItem('gecc-role') === 'staff'; }catch(e){ return false; } }
+var LEGACY = { 'BKK-004':'1001', 'AYA-011':'1031', 'PLK-018':'1118', 'NMA-022':'2114', 'UBN-030':'2290', 'PBI-014':'4101', 'SRT-027':'4239', 'HDY-033':'4347' };
+function ownCode(){ var c = 'BKK-004'; try{ c = (localStorage.getItem('gecc-station-code') || 'BKK-004').toUpperCase(); }catch(e){} return LEGACY[c] || c; }
+
+async function fetchRows(){
+  if(window.GeccDB && window.GeccDB.enabled){
+    await window.GeccDB.ready; MODE = 'db';
+    return (await window.GeccDB.staleStations(STALE_DAYS)).map(function(r){ return { code:r.station_code, name:r.display_name, last:r.last_update, base:r.baseline, days:r.days_idle, never:!!r.never_updated }; });
+  }
+  // demo mode: only what this browser knows (stations updated on this device)
+  MODE = 'local'; var out = [], now = Date.now();
+  function add(code, iso, never){ var t = new Date(iso).getTime(); if(isNaN(t)) return; var days = Math.floor((now - t) / 86400000); if(days >= STALE_DAYS) out.push({ code:code, name:'', last:never ? null : iso, base:iso, days:days, never:never }); }
+  try{
+    if(isStaff()){
+      var code = ownCode(), touch = localStorage.getItem('gecc-audit-touch:' + code);
+      if(touch) add(code, touch, false);
+      else{ var fs = 'gecc-first-seen:' + code, first = localStorage.getItem(fs); if(!first){ first = new Date().toISOString(); localStorage.setItem(fs, first); } add(code, first, true); }
+    }else{
+      for(var i = 0; i < localStorage.length; i++){ var k = localStorage.key(i); if(k.indexOf('gecc-audit-touch:') === 0) add(k.split(':')[1], localStorage.getItem(k), false); }
+    }
+  }catch(e){}
+  return out.sort(function(a, b){ return b.days - a.days; });
+}
+function buildAlerts(){
+  var now = new Date(), stamp = 'ตรวจ ณ ' + thDate(now) + ' · ' + thTime(now);
+  if(!ROWS.length) return [];
+  if(isStaff()){
+    var r = ROWS[0], last = r.last ? new Date(r.last) : null, base = r.base ? new Date(r.base) : null;
+    return [{ id:'stale:' + r.code + ':' + (r.last || r.base), type:'urgent', cat:'stale', icon:'⏰', title:'สถานีของคุณไม่มีการอัปเดตเกณฑ์มาแล้ว ' + r.days + ' วัน (เกิน 1 เดือน)',
+      desc: r.never ? 'ยังไม่เคยอัปเดตผลการประเมินเลยตั้งแต่เปิดบัญชีเมื่อ ' + (base ? thDate(base) : '-') + ' · กรุณาเข้าไปติ๊กเกณฑ์และแนบหลักฐาน เจ้าหน้าที่ได้รับแจ้งเรื่องนี้แล้ว' : 'อัปเดตล่าสุดเมื่อ ' + thDate(last) + ' ' + thTime(last) + ' · กรุณาอัปเดตเกณฑ์/หลักฐานของสถานี เจ้าหน้าที่ได้รับแจ้งเรื่องนี้แล้ว',
+      time:stamp, link:'gecc-audit.html', linkLabel:'ไปอัปเดตเกณฑ์ →' }];
+  }
+  var top = ROWS.slice(0, 3).map(function(x){ return (x.name ? x.name : stName(x.code)).replace(/^นายสถานี/, '') + ' (' + x.days + ' วัน)'; }).join(', ');
+  return [{ id:'stale-sum:' + ROWS.length, type:'urgent', cat:'stale', icon:'⏰', title:'มี ' + ROWS.length + ' สถานีไม่มีการอัปเดตเกณฑ์เกิน 1 เดือน',
+    desc:'สถานีเหล่านี้ไม่มีการติ๊กเกณฑ์ แก้ไข หรือแนบหลักฐานมาแล้วอย่างน้อย ' + STALE_DAYS + ' วัน · ไม่มีการอัปเดตนานที่สุด: ' + top + (ROWS.length > 3 ? ' ...' : '') + ' · ระบบแจ้งเตือนไปยังสถานีเหล่านั้นแล้ว',
+    time:stamp, link:'#stale-panel', linkLabel:'ดูรายชื่อสถานี ↓' }];
+}
+function filtered(){
+  var q = norm(Q);
+  return ROWS.filter(function(r){ return !q || [r.code, r.name, stName(r.code)].some(function(k){ return norm(k).indexOf(q) > -1; }); });
+}
+function renderPanel(){
+  var panel = document.getElementById('stale-panel'), note = document.getElementById('st-note');
+  if(isStaff()){ panel.style.display = 'none'; }
+  else{
+    panel.style.display = ROWS.length ? 'block' : 'none';
+    var list = filtered(), pages = Math.max(1, Math.ceil(list.length / PAGE));
+    PG = Math.min(Math.max(0, PG), pages - 1);
+    var from = PG * PAGE, slice = list.slice(from, from + PAGE);
+    document.getElementById('st-title').textContent = 'สถานีที่ไม่มีการอัปเดตเกณฑ์เกิน 1 เดือน (' + ROWS.length + ' สถานี)';
+    document.getElementById('st-body').innerHTML = slice.length ? slice.map(function(r){
+      return '<tr><td class="nm"><b>' + esc(stName(r.code)) + '</b><span>' + esc(r.code) + (r.name ? ' · ' + esc(r.name) : '') + '</span></td>' +
+        '<td>' + (r.never ? 'ยังไม่เคยอัปเดต<div style="font-size:11px;color:var(--text-faint)">นับจากเปิดบัญชี ' + thDate(new Date(r.base)) + '</div>' : thDate(new Date(r.last)) + ' · ' + thTime(new Date(r.last))) + '</td>' +
+        '<td class="st-days">' + r.days + ' วัน</td><td style="text-align:right"><a href="gecc-station.html?id=' + encodeURIComponent(r.code) + '">เปิดหน้าสถานี →</a></td></tr>';
+    }).join('') : '<tr><td colspan="4" style="text-align:center;color:var(--text-faint);padding:20px">ไม่พบสถานี</td></tr>';
+    document.getElementById('st-count').textContent = list.length ? 'แสดง ' + (from + 1) + '–' + (from + slice.length) + ' จาก ' + list.length + ' สถานี' : 'ไม่พบรายการ';
+    document.getElementById('st-pg').textContent = 'หน้า ' + (PG + 1) + ' / ' + pages;
+    document.getElementById('st-prev').disabled = PG <= 0;
+    var nxt = Math.min(PAGE, list.length - (from + PAGE)), nb = document.getElementById('st-next'); nb.disabled = PG >= pages - 1; nb.textContent = nxt > 0 ? 'ถัดไป ' + nxt + ' ›' : 'ถัดไป ›';
+  }
+  if(MODE === 'local'){
+    note.style.display = 'block';
+    note.textContent = isStaff() ? 'ตอนนี้ยังไม่ได้เชื่อมฐานข้อมูลกลาง — การตรวจ “ไม่อัปเดต 1 เดือน” ใช้ข้อมูลในเบราว์เซอร์เครื่องนี้เท่านั้น' : 'ตอนนี้ยังไม่ได้เชื่อมฐานข้อมูลกลาง — เห็นเฉพาะสถานีที่ถูกอัปเดตบนเครื่องนี้ หากต้องการให้ตรวจทุกสถานีและแจ้งเตือนถึงสถานีนั้น ๆ ต้องเชื่อมฐานข้อมูลกลาง';
+  }else note.style.display = 'none';
+}
+async function load(){
+  try{ ROWS = await fetchRows(); }catch(e){
+    ROWS = [];
+    var note = document.getElementById('st-note'); note.style.display = 'block';
+    note.innerHTML = 'ตรวจสถานีที่ไม่อัปเดตไม่สำเร็จ: ' + esc(e && e.message || e) + ' · ถ้าเพิ่งอัปเดตระบบ ให้รันไฟล์ supabase-setup.sql ซ้ำ แล้ว<a href="gecc-check.html">ตรวจสอบการเชื่อมต่อ</a>';
+  }
+  REAL = buildAlerts();
+  render(); updateBadges(); renderPanel();
+}
+window.stalePanel = { search:function(v){ Q = v; PG = 0; renderPanel(); }, page:function(d){ PG += d; renderPanel(); } };
+load();
+setInterval(function(){ if(!document.hidden && window.GeccDB && window.GeccDB.enabled) load(); }, 60000);
+})();
 </script>
 <!--GECC_CHAT_START-->
 <script>

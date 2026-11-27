@@ -723,6 +723,12 @@ GeccDB.loadLogins = async function(){
   }
   return out;
 };
+/* stations with no criteria update for N days (officers: all stations, station users: their own) */
+GeccDB.staleStations = async function(days){
+  var r = await sb.rpc('stale_stations', { p_days:days || 30 });
+  if(r.error) throw r.error;
+  return r.data || [];
+};
 GeccDB.loadAllAudit = async function(){
   var out = [], from = 0, size = 1000;
   for(;;){
@@ -736,6 +742,22 @@ GeccDB.loadAllAudit = async function(){
   }
   return out;
 };
+
+/* ---------- bell badge on every page: +1 while a "no update for 1 month" alert is unread ---------- */
+if(enabled){
+  GeccDB.ready.then(async function(m){
+    if(!m || m.noProfile || window.__geccOwnsBadge) return;
+    try{
+      var rows = await GeccDB.staleStations(30);
+      GeccDB.stale = rows;
+      if(!rows.length) return;
+      var id = m.role === 'officer' ? 'stale-sum:' + rows.length : 'stale:' + rows[0].station_code + ':' + (rows[0].last_update || rows[0].baseline);
+      var read = []; try{ read = JSON.parse(localStorage.getItem('gecc-notif-read') || '[]'); }catch(e){}
+      if(read.indexOf(id) > -1) return;
+      document.querySelectorAll('.notif-badge').forEach(function(b){ var n = parseInt(b.textContent, 10) || 0; b.textContent = n + 1; b.style.display = 'inline-flex'; });
+    }catch(e){}
+  });
+}
 
 /* ---------- connection chip (bottom-left) + account popover ---------- */
 function mountChip(){
